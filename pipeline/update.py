@@ -497,6 +497,12 @@ def main():
     sb = json.load(open(sbp))
     report["superbet"] = {"legs": len(sb["legs"]), "odds": sb["odds"], "p": round(sb["p"], 4),
                           "bets": [f"{x['when']} {x['h']}-{x['a']}: {x['label']} ({x['odd']})" for x in sb["legs"]]}
+    try:  # track record (predictions vs results); never blocks the update
+        import track
+        tr = track.run(root, today, out)
+        report["track"] = {k: tr.get(k) for k in ("settled", "open", "all", "superbet")}
+    except Exception as e:  # noqa: BLE001
+        report["track"] = {"error": str(e)}
     run(sys.executable, "-I", str(HERE / "build.py"), str(out), str(root / "dist" / "streakscout.html"))
     report["recent_rows"] = int(len(rec))
     report["fixtures_total"] = len(fixtures)

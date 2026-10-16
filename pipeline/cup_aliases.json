@@ -1,0 +1,416 @@
+{
+ "1899 Hoffenheim": {
+  "team": "Hoffenheim"
+ },
+ "AC Milan": {
+  "team": "Milan"
+ },
+ "AEK Athene": {
+  "team": "AEK"
+ },
+ "AS Roma": {
+  "team": "Roma"
+ },
+ "AZ Alkmaar": {
+  "team": "AZ Alkmaar"
+ },
+ "Aarhus GF": {
+  "team": "Aarhus GF",
+  "foreign": true,
+  "elo": "Aarhus"
+ },
+ "Ajax": {
+  "team": "Ajax"
+ },
+ "Anderlecht": {
+  "team": "Anderlecht"
+ },
+ "Ararat Yerevan": {
+  "team": "Ararat Yerevan",
+  "foreign": true,
+  "elo": null
+ },
+ "Arsenal": {
+  "team": "Arsenal"
+ },
+ "Aston Villa": {
+  "team": "Aston Villa"
+ },
+ "Atalanta": {
+  "team": "Atalanta"
+ },
+ "Atlético Madrid": {
+  "team": "Ath Madrid"
+ },
+ "Barcelona": {
+  "team": "Barcelona"
+ },
+ "Bayer Leverkusen": {
+  "team": "Leverkusen"
+ },
+ "Bayern München": {
+  "team": "Bayern Munich"
+ },
+ "Besiktas": {
+  "team": "Besiktas"
+ },
+ "Bialystok": {
+  "team": "Bialystok",
+  "foreign": true,
+  "elo": "Jagiellonia"
+ },
+ "Bodø Glimt": {
+  "team": "Bodø Glimt",
+  "foreign": true,
+  "elo": "Bodoe Glimt"
+ },
+ "Borac Banja Luka": {
+  "team": "Borac Banja Luka",
+  "foreign": true,
+  "elo": null
+ },
+ "Borussia Dortmund": {
+  "team": "Dortmund"
+ },
+ "Bournemouth": {
+  "team": "Bournemouth"
+ },
+ "Braga": {
+  "team": "Sp Braga"
+ },
+ "Brann": {
+  "team": "Brann",
+  "foreign": true,
+  "elo": "Brann"
+ },
+ "Brighton": {
+  "team": "Brighton"
+ },
+ "CS U Craiova": {
+  "team": "CS U Craiova",
+  "foreign": true,
+  "elo": "Craiova"
+ },
+ "CSKA Sofia": {
+  "team": "CSKA Sofia",
+  "foreign": true,
+  "elo": null
+ },
+ "Celta De Vigo": {
+  "team": "Celta"
+ },
+ "Celtic Glasgow": {
+  "team": "Celtic"
+ },
+ "Club Brugge": {
+  "team": "Club Brugge"
+ },
+ "Como": {
+  "team": "Como"
+ },
+ "Crystal Palace": {
+  "team": "Crystal Palace"
+ },
+ "Dinamo Zagreb": {
+  "team": "Dinamo Zagreb",
+  "foreign": true,
+  "elo": null
+ },
+ "Egnatia Rrogozhinë": {
+  "team": "Egnatia Rrogozhinë",
+  "foreign": true,
+  "elo": null
+ },
+ "FC Kopenhagen": {
+  "team": "FC Kopenhagen",
+  "foreign": true,
+  "elo": "FC Kobenhavn"
+ },
+ "FC Midtjylland": {
+  "team": "FC Midtjylland",
+  "foreign": true,
+  "elo": "Midtjylland"
+ },
+ "FC Nordsjælland": {
+  "team": "FC Nordsjælland",
+  "foreign": true,
+  "elo": "Nordsjaelland"
+ },
+ "FC Porto": {
+  "team": "Porto"
+ },
+ "FC Thun": {
+  "team": "FC Thun",
+  "foreign": true,
+  "elo": null
+ },
+ "FC Twente": {
+  "team": "Twente"
+ },
+ "FK Kauno Zalgiris": {
+  "team": "FK Kauno Zalgiris",
+  "foreign": true,
+  "elo": null
+ },
+ "Fenerbahçe": {
+  "team": "Fenerbahce"
+ },
+ "Ferencváros": {
+  "team": "Ferencváros",
+  "foreign": true,
+  "elo": null
+ },
+ "Feyenoord": {
+  "team": "Feyenoord"
+ },
+ "Freiburg": {
+  "team": "Freiburg"
+ },
+ "Galatasaray": {
+  "team": "Galatasaray"
+ },
+ "Getafe": {
+  "team": "Getafe"
+ },
+ "Hajduk Split": {
+  "team": "Hajduk Split",
+  "foreign": true,
+  "elo": null
+ },
+ "Hapoel Beer Sheva": {
+  "team": "Hapoel Beer Sheva",
+  "foreign": true,
+  "elo": null
+ },
+ "Hearts": {
+  "team": "Hearts"
+ },
+ "Inter Club d'Escaldes": {
+  "team": "Inter Club d'Escaldes",
+  "foreign": true,
+  "elo": null
+ },
+ "Inter Milaan": {
+  "team": "Inter"
+ },
+ "Jablonec 97": {
+  "team": "Jablonec 97",
+  "foreign": true,
+  "elo": null
+ },
+ "Juventus": {
+  "team": "Juventus"
+ },
+ "KAA Gent": {
+  "team": "Gent"
+ },
+ "Kairat Almaty": {
+  "team": "Kairat Almaty",
+  "foreign": true,
+  "elo": null
+ },
+ "KuPS": {
+  "team": "KuPS",
+  "foreign": true,
+  "elo": null
+ },
+ "LASK Linz": {
+  "team": "LASK Linz",
+  "foreign": true,
+  "elo": "LASK"
+ },
+ "Lech Poznan": {
+  "team": "Lech Poznan",
+  "foreign": true,
+  "elo": "Lech"
+ },
+ "Levski Sofia": {
+  "team": "Levski Sofia",
+  "foreign": true,
+  "elo": null
+ },
+ "Lille OSC": {
+  "team": "Lille"
+ },
+ "Lillestrøm SK": {
+  "team": "Lillestrøm SK",
+  "foreign": true,
+  "elo": "Lillestrom"
+ },
+ "Lincoln Red IMPS FC": {
+  "team": "Lincoln Red IMPS FC",
+  "foreign": true,
+  "elo": null
+ },
+ "Liverpool FC": {
+  "team": "Liverpool"
+ },
+ "Lugano": {
+  "team": "Lugano",
+  "foreign": true,
+  "elo": null
+ },
+ "Lyon": {
+  "team": "Lyon"
+ },
+ "Manchester City": {
+  "team": "Man City"
+ },
+ "Manchester United": {
+  "team": "Man United"
+ },
+ "Marseille": {
+  "team": "Marseille"
+ },
+ "Mjällby AIF": {
+  "team": "Mjällby AIF",
+  "foreign": true,
+  "elo": "Mjaellby"
+ },
+ "Monaco": {
+  "team": "Monaco"
+ },
+ "NEC": {
+  "team": "Nijmegen"
+ },
+ "NK Celje": {
+  "team": "NK Celje",
+  "foreign": true,
+  "elo": null
+ },
+ "Napoli": {
+  "team": "Napoli"
+ },
+ "OFI Kreta": {
+  "team": "OFI Crete"
+ },
+ "Olympiakos Piraeus": {
+  "team": "Olympiakos"
+ },
+ "Omonia Nicosia": {
+  "team": "Omonia Nicosia",
+  "foreign": true,
+  "elo": null
+ },
+ "PSG": {
+  "team": "Paris SG"
+ },
+ "PSV": {
+  "team": "PSV Eindhoven"
+ },
+ "Pafos FC": {
+  "team": "Pafos FC",
+  "foreign": true,
+  "elo": null
+ },
+ "Panathinaikos": {
+  "team": "Panathinaikos"
+ },
+ "RB Leipzig": {
+  "team": "RB Leipzig"
+ },
+ "RC Lens": {
+  "team": "Lens"
+ },
+ "Real Betis": {
+  "team": "Betis"
+ },
+ "Real Madrid": {
+  "team": "Real Madrid"
+ },
+ "Real Sociedad": {
+  "team": "Sociedad"
+ },
+ "Red Bull Salzburg": {
+  "team": "Red Bull Salzburg",
+  "foreign": true,
+  "elo": "Salzburg"
+ },
+ "Rennes": {
+  "team": "Rennes"
+ },
+ "Riga FC": {
+  "team": "Riga FC",
+  "foreign": true,
+  "elo": null
+ },
+ "Rode Ster Belgrado": {
+  "team": "Rode Ster Belgrado",
+  "foreign": true,
+  "elo": null
+ },
+ "SL Benfica": {
+  "team": "Benfica"
+ },
+ "STVV": {
+  "team": "St Truiden"
+ },
+ "Sabah": {
+  "team": "Sabah",
+  "foreign": true,
+  "elo": null
+ },
+ "Saburtalo Tbilisi": {
+  "team": "Saburtalo Tbilisi",
+  "foreign": true,
+  "elo": null
+ },
+ "Shakhtar Donetsk": {
+  "team": "Shakhtar Donetsk",
+  "foreign": true,
+  "elo": null
+ },
+ "Slavia Praag": {
+  "team": "Slavia Praag",
+  "foreign": true,
+  "elo": null
+ },
+ "Slovan Bratislava": {
+  "team": "Slovan Bratislava",
+  "foreign": true,
+  "elo": null
+ },
+ "Sparta Praag": {
+  "team": "Sparta Praag",
+  "foreign": true,
+  "elo": null
+ },
+ "Sporting Lissabon": {
+  "team": "Sp Lisbon"
+ },
+ "Sturm Graz": {
+  "team": "Sturm Graz",
+  "foreign": true,
+  "elo": "Sturm Graz"
+ },
+ "Sunderland": {
+  "team": "Sunderland"
+ },
+ "Torreense": {
+  "team": "Torreense",
+  "foreign": true,
+  "elo": null
+ },
+ "Trabzonspor": {
+  "team": "Trabzonspor"
+ },
+ "Union SG": {
+  "team": "St. Gilloise"
+ },
+ "VFB Stuttgart": {
+  "team": "Stuttgart"
+ },
+ "Viking FK": {
+  "team": "Viking FK",
+  "foreign": true,
+  "elo": "Viking"
+ },
+ "Viktoria Plzen": {
+  "team": "Viktoria Plzen",
+  "foreign": true,
+  "elo": null
+ },
+ "Villarreal": {
+  "team": "Villarreal"
+ }
+}

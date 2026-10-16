@@ -1,0 +1,1087 @@
+<title>StreakScout</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a match coupon. Scoreboard-style fixture header, then a ranked list of bets,
+   each backed by hit-strips (last matches as dots). A third tab checks whether streaks hold up. */
+:root {
+  --bg: #EEF1EC; --surface: #FFFFFF; --sunk: #E3E8E3; --ink: #15201C; --muted: #5A6862;
+  --line: #D2DAD4; --accent: #2346D8; --accent-ink: #FFFFFF; --accent-soft: #E3E8FB;
+  --hit: #1E8A55; --hit-soft: #DCEFE4; --miss: #C4CDC7; --bad: #BF4128; --bad-soft: #F6E1DB;
+  --warn: #A86D12; --warn-soft: #F5EAD3; --slip-pos: #7FE0A8; --slip-warn: #F2C77E;
+  --f-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0E1412; --surface: #161E1B; --sunk: #1D2723; --ink: #E4ECE7; --muted: #94A39C;
+  --line: #2A3631; --accent: #8FA3FF; --accent-ink: #0E1412; --accent-soft: #1F2848;
+  --hit: #45C385; --hit-soft: #173527; --miss: #34423C; --bad: #EF8166; --bad-soft: #3A211B;
+  --warn: #E2A84E; --warn-soft: #3A2E17; --slip-pos: #146B40; --slip-warn: #7A4A05; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0E1412; --surface: #161E1B; --sunk: #1D2723; --ink: #E4ECE7; --muted: #94A39C;
+  --line: #2A3631; --accent: #8FA3FF; --accent-ink: #0E1412; --accent-soft: #1F2848;
+  --hit: #45C385; --hit-soft: #173527; --miss: #34423C; --bad: #EF8166; --bad-soft: #3A211B;
+  --warn: #E2A84E; --warn-soft: #3A2E17; --slip-pos: #146B40; --slip-warn: #7A4A05; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.app { max-width: 980px; margin: 0 auto; padding-block: 20px 200px; display: grid; gap: 18px }
+button, input, select { font: inherit; color: inherit }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums }
+.eyebrow { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 600 }
+
+/* top bar */
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px }
+.brand { display: flex; align-items: center; gap: 10px }
+.brand h1 { margin: 0; font: 700 26px/1 var(--f-display); letter-spacing: .02em; text-transform: uppercase }
+.logo { display: inline-flex; gap: 3px }
+.logo i { width: 8px; height: 8px; border-radius: 50%; background: var(--hit) }
+.logo i.o { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted) }
+.chip-data { font-size: 12.5px; color: var(--muted); background: var(--sunk); border-radius: 999px; padding: 5px 11px }
+.chip-data b { color: var(--ink); font-weight: 600 }
+
+/* fixture */
+.fixture { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 14px }
+.league-row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between }
+.select { appearance: none; background: var(--sunk) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23889' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 12px center;
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 32px 8px 12px; max-width: 100% }
+.matchup { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: start }
+.side { display: grid; gap: 6px; min-width: 0 }
+.side.away { text-align: right; justify-items: end }
+.team-select { appearance: none; border: 0; background: transparent; font: 700 clamp(24px, 5vw, 40px)/1.05 var(--f-display);
+  text-transform: uppercase; letter-spacing: .01em; padding: 2px 0; width: 100%; cursor: pointer; text-overflow: ellipsis; color: var(--ink) }
+.side.away .team-select { text-align: right; text-align-last: right }
+.team-select:hover { color: var(--accent) }
+.vs { font: 600 18px/1 var(--f-display); color: var(--muted); padding-top: 26px; text-transform: uppercase }
+.form { display: flex; gap: 4px }
+.form span { width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; font: 600 12px/1 var(--f-mono) }
+.form .W { background: var(--hit); color: var(--surface) } .form .G { background: var(--miss); color: var(--ink) } .form .V { background: var(--bad); color: var(--surface) }
+.side .meta { font-size: 12.5px; color: var(--muted) }
+.quick { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin }
+.quick .lab { flex: none; align-self: center; font-size: 12px; color: var(--muted); padding-right: 2px }
+.qchip { flex: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; white-space: nowrap }
+.qchip:hover { border-color: var(--accent) }
+.qchip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink) }
+.qchip small { opacity: .75; margin-left: 4px }
+
+/* tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto }
+.tab { background: none; border: 0; padding: 10px 14px; font: 600 17px/1 var(--f-display); text-transform: uppercase; letter-spacing: .03em;
+  color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; cursor: pointer; white-space: nowrap }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent) }
+
+/* toolbar */
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between }
+.seg { display: inline-flex; background: var(--sunk); border-radius: 9px; padding: 3px; gap: 2px }
+.seg button { border: 0; background: transparent; padding: 6px 11px; border-radius: 7px; font-size: 13.5px; cursor: pointer; color: var(--muted) }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12) }
+.filters { display: flex; flex-wrap: wrap; gap: 6px }
+.filters button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 11px; font-size: 13px; cursor: pointer; color: var(--muted) }
+.filters button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); font-weight: 500 }
+.note { margin: 0; font-size: 13px; color: var(--muted); max-width: 70ch }
+
+/* bets */
+.bets { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden }
+.bet { border-top: 1px solid var(--line) }
+.bet:first-child { border-top: 0 }
+.bet-row { display: grid; grid-template-columns: minmax(0,1fr) 150px 104px 168px; gap: 14px; align-items: center; padding: 12px 16px }
+.bet-toggle { display: grid; gap: 3px; text-align: left; background: none; border: 0; padding: 0; cursor: pointer; min-width: 0 }
+.bet-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-weight: 600; font-size: 15.5px }
+.bet-name .chev { color: var(--muted); font-size: 11px; transition: transform .15s }
+.bet[data-open="true"] .chev { transform: rotate(90deg) }
+.bet-why { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.bet-why b { color: var(--ink); font-weight: 500 }
+.sig { font-size: 11px; font-weight: 600; letter-spacing: .03em; padding: 2px 7px; border-radius: 999px; white-space: nowrap }
+.sig.s3 { background: var(--hit-soft); color: var(--hit) } .sig.s2 { background: var(--warn-soft); color: var(--warn) } .sig.s1 { background: var(--sunk); color: var(--muted) }
+.prob { display: grid; gap: 5px }
+.prob .pct { font: 600 20px/1 var(--f-mono) }
+.prob .pct small { font-size: 12px; color: var(--muted); font-weight: 500; margin-left: 6px }
+.bar { position: relative; height: 6px; background: var(--sunk); border-radius: 3px }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 3px }
+.bar b { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--ink); opacity: .55; transform: translateX(-1px) }
+.fair { display: grid; gap: 2px; text-align: right }
+.fair .v { font: 600 17px/1.1 var(--f-mono) }
+.fair .l, .oddbox .l { font-size: 11px; color: var(--muted) }
+.oddbox { display: grid; grid-template-columns: 1fr auto; gap: 4px 6px; align-items: center }
+.oddbox input { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--bg); border-radius: 7px; padding: 6px 8px; font-family: var(--f-mono); font-size: 14px }
+.add { border: 1px solid var(--line); background: transparent; border-radius: 7px; padding: 6px 9px; cursor: pointer; font-size: 13px; white-space: nowrap }
+.add[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink) }
+.val { grid-column: 1 / -1; font-size: 12px; min-height: 16px; color: var(--muted) }
+.val.pos { color: var(--hit); font-weight: 600 } .val.neg { color: var(--bad) }
+.detail { padding: 2px 16px 16px; display: grid; gap: 12px }
+.strips { display: grid; gap: 2px; background: var(--bg); border-radius: var(--r); padding: 8px 12px }
+.srow { display: grid; grid-template-columns: minmax(0, 210px) minmax(0,1fr) 52px 44px; gap: 10px; align-items: center; padding: 5px 0; border-top: 1px dashed var(--line) }
+.srow:first-child { border-top: 0 }
+.srow .who { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.dots { display: flex; gap: 4px; flex-wrap: wrap }
+.dot { width: 13px; height: 13px; border-radius: 50%; background: var(--miss); flex: none }
+.dot.h { background: var(--hit) }
+.dot.n { background: transparent; box-shadow: inset 0 0 0 1.5px var(--line) }
+.frac { font: 500 13px var(--f-mono); text-align: right }
+.z { font-size: 11px; font-weight: 600; text-align: right }
+.z.up { color: var(--hit) } .z.dn { color: var(--bad) } .z.eq { color: var(--muted) }
+.streak { font-size: 11px; color: var(--muted); margin-left: 6px }
+.dsum { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted) }
+.dsum b { color: var(--ink); font-weight: 600 }
+.empty { padding: 24px 16px; color: var(--muted) }
+.matchnote { background: var(--accent-soft); border-radius: 10px; padding: 10px 14px; font-size: 13.5px; max-width: 80ch }
+.subhead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 14px; margin-top: 10px }
+.subhead h3 { margin: 0; font: 700 20px/1.1 var(--f-display); text-transform: uppercase }
+.pl-meta { font-size: 13px; color: var(--muted) }
+.prob .mkt, .fair .bk { font-size: 11.5px; color: var(--muted); font-family: var(--f-body) }
+.fair .bk b { color: var(--ink); font-weight: 600; font-family: var(--f-mono) }
+.bestopts { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; font-size: 13.5px; color: var(--muted) }
+.bestopts label { display: inline-flex; align-items: center; gap: 6px }
+.bestopts select { padding: 4px 26px 4px 8px }
+.combo { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 10px }
+.combo-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between }
+.combo-head h3 { margin: 0; font: 700 20px/1.1 var(--f-display); text-transform: uppercase }
+.combo ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14px }
+.combo ol small { color: var(--muted) }
+.combo-sum { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: center; font-size: 13.5px; color: var(--muted) }
+.combo-sum b { color: var(--ink); font-family: var(--f-mono); font-size: 16px }
+.combo-sum .go { margin-left: auto; border: 0; background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer }
+.combo.super { border-color: var(--accent); box-shadow: inset 4px 0 0 var(--accent) }
+.combo.super ol li { line-height: 1.45 }
+.combo.super .lg { font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--muted); text-transform: uppercase; margin-right: 6px }
+.combo.super .alt { display: block; font-size: 12px; color: var(--muted) }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 2px }
+.oddstbl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 16px; font-size: 13px; background: var(--bg); border-radius: var(--r); padding: 8px 12px }
+.oddstbl span { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); padding: 3px 0 }
+.oddstbl span.top b { color: var(--hit) }
+.pl-team { font-size: 11px; font-weight: 600; letter-spacing: .03em; padding: 2px 7px; border-radius: 999px; background: var(--sunk); color: var(--muted); white-space: nowrap }
+
+/* form tab */
+.formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px }
+.fcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; min-width: 0 }
+.fcard h3 { margin: 0 0 8px; font: 700 22px/1.1 var(--f-display); text-transform: uppercase }
+.tbl-wrap { overflow-x: auto }
+table { border-collapse: collapse; width: 100%; font-size: 13px }
+th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 6px 6px; border-bottom: 1px solid var(--line); white-space: nowrap }
+td { padding: 6px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums }
+tr:last-child td { border-bottom: 0 }
+.res { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; font: 600 11px var(--f-mono) }
+.res.W { background: var(--hit); color: var(--surface) } .res.G { background: var(--miss) } .res.V { background: var(--bad); color: var(--surface) }
+td.na { color: var(--muted) }
+
+/* history tab */
+.hist { display: grid; gap: 20px }
+.lead h2 { margin: 0 0 4px; font: 700 30px/1.05 var(--f-display); text-transform: uppercase; text-wrap: balance }
+.lead p { margin: 0; color: var(--muted); max-width: 66ch }
+.takeaways { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px }
+.tk { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 6px; align-content: start }
+.tk .big { font: 700 34px/1 var(--f-display) }
+.tk .big small { font: 500 14px var(--f-body); color: var(--muted); margin-left: 4px }
+.tk p { margin: 0; font-size: 13.5px; color: var(--muted) }
+.tk p b { color: var(--ink); font-weight: 600 }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; min-width: 0 }
+.panel h3 { margin: 0; font: 700 21px/1.1 var(--f-display); text-transform: uppercase }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted) }
+.legend span::before { content: ""; display: inline-block; width: 16px; height: 0; border-top: 2.5px solid var(--accent); vertical-align: middle; margin-right: 6px }
+.legend .naive::before { border-top: 2px dashed var(--muted) }
+.legend .avg::before { border-top: 1.5px dotted var(--ink) }
+#chart { width: 100%; min-height: 260px }
+#chart svg { display: block }
+.streaktbl td:first-child, .streaktbl th:first-child { padding-left: 0 }
+.roi { font-family: var(--f-mono); font-weight: 500 }
+.roi.neg { color: var(--bad) } .roi.pos { color: var(--hit) }
+.method { font-size: 13px; color: var(--muted); max-width: 72ch; display: grid; gap: 6px }
+.method p { margin: 0 }
+
+footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 4px }
+footer a { color: inherit }
+
+/* bet slip */
+.slip { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--ink); color: var(--bg);
+  padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)) }
+.slip-in { max-width: 980px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px }
+.slip .t { font: 700 18px/1 var(--f-display); text-transform: uppercase; letter-spacing: .03em }
+.slip .kv { display: grid; gap: 1px }
+.slip .kv .l { font-size: 11px; opacity: .7 }
+.slip .kv .v { font: 600 16px/1.1 var(--f-mono) }
+.slip input { width: 92px; border: 1px solid transparent; background: var(--surface); color: var(--ink); border-radius: 7px; padding: 6px 8px; font-family: var(--f-mono) }
+.slip button { border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 7px; padding: 6px 10px; cursor: pointer; font-size: 13px }
+.slip .items { flex-basis: 100%; font-size: 12.5px; opacity: .85; display: flex; flex-wrap: wrap; gap: 4px 14px }
+.slip .warn { flex-basis: 100%; font-size: 12px; color: var(--slip-warn) }
+.slip .sv.pos { color: var(--slip-pos) }
+
+@media (max-width: 760px) {
+  .bet-row { grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "name name" "prob fair" "odd odd"; gap: 10px 14px }
+  .bet-toggle { grid-area: name } .prob { grid-area: prob } .fair { grid-area: fair } .oddbox { grid-area: odd; grid-template-columns: 1fr auto auto }
+  .val { grid-column: auto; align-self: center }
+  .bet-why { white-space: normal }
+  .srow { grid-template-columns: minmax(0,1fr) 48px 40px; grid-template-areas: "who frac z" "dots dots dots" }
+  .srow .who { grid-area: who } .srow .dots { grid-area: dots } .srow .frac { grid-area: frac } .srow .z { grid-area: z }
+  .vs { padding-top: 30px; font-size: 15px }
+  .tab { font-size: 15px; padding: 10px 8px }
+}
+@media (max-width: 420px) { .matchup { grid-template-columns: 1fr; } .side.away { text-align: left; justify-items: start } .side.away .team-select { text-align: left; text-align-last: left } .vs { padding-top: 0 } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><span class="logo" aria-hidden="true"><i></i><i></i><i class="o"></i><i></i><i></i></span><h1>StreakScout</h1></div>
+    <div class="chip-data" id="dataChip"></div>
+  </header>
+
+  <section class="fixture" aria-label="Wedstrijd kiezen">
+    <div class="league-row">
+      <label class="eyebrow" for="league">Competitie</label>
+      <select class="select" id="league" style="flex:1 1 220px; max-width: 320px"></select>
+    </div>
+    <div class="matchup">
+      <div class="side home">
+        <label class="eyebrow" for="home">Thuisploeg</label>
+        <select class="team-select" id="home"></select>
+        <div class="form" id="formH"></div>
+        <div class="meta" id="metaH"></div>
+      </div>
+      <div class="vs">vs</div>
+      <div class="side away">
+        <label class="eyebrow" for="away">Uitploeg</label>
+        <select class="team-select" id="away"></select>
+        <div class="form" id="formA"></div>
+        <div class="meta" id="metaA"></div>
+      </div>
+    </div>
+    <div class="quick" id="quick"></div>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="Weergave">
+    <button class="tab" role="tab" id="t-bets" aria-controls="p-bets" aria-selected="true">Bets</button>
+    <button class="tab" role="tab" id="t-best" aria-controls="p-best" aria-selected="false">Beste bets</button>
+    <button class="tab" role="tab" id="t-form" aria-controls="p-form" aria-selected="false">Laatste matchen</button>
+    <button class="tab" role="tab" id="t-hist" aria-controls="p-hist" aria-selected="false">Kloppen reeksen?</button>
+  </nav>
+
+  <section id="p-bets" role="tabpanel" aria-labelledby="t-bets" style="display:grid; gap:12px">
+    <p class="matchnote" id="matchNote" hidden></p>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="Sorteren">
+        <button id="s-lift" aria-pressed="true">Opvallendst</button>
+        <button id="s-p" aria-pressed="false">Meeste kans</button>
+        <button id="s-val" aria-pressed="false">Value</button>
+      </div>
+      <div class="filters" role="group" aria-label="Markten">
+        <button data-g="all" aria-pressed="true">Alles</button>
+        <button data-g="res" aria-pressed="false">Uitslag</button>
+        <button data-g="goals" aria-pressed="false">Goals</button>
+        <button data-g="corners" aria-pressed="false">Corners</button>
+        <button data-g="cards" aria-pressed="false">Kaarten</button>
+        <button data-g="shots" aria-pressed="false">Schoten</button>
+        <button data-g="players" aria-pressed="false">Spelers</button>
+      </div>
+    </div>
+    <p class="note" id="sortNote"></p>
+    <ul class="bets" id="bets"></ul>
+    <div id="playersWrap" hidden style="display:grid; gap:10px">
+      <div class="subhead"><h3>Spelers · scoort in de match</h3><span class="pl-meta" id="playersMeta"></span></div>
+      <p class="note">Ruwe schatting, niet getest zoals de bets hierboven: goals per 90 minuten dit seizoen (naar het gemiddelde getrokken), de gemiddelde speeltijd en de verwachte goals van zijn ploeg in deze match. Er wordt aangenomen dat hij speelt; check de opstelling. Spelersdata is er enkel voor de Jupiler Pro League.</p>
+      <ul class="bets" id="players"></ul>
+    </div>
+  </section>
+
+  <section id="p-best" role="tabpanel" aria-labelledby="t-best" hidden>
+    <div style="display:grid; gap:12px">
+      <div class="combo super" id="superCard" hidden>
+        <div class="combo-head"><h3>Superbet van de dag</h3><span class="pl-meta" id="superMeta"></span></div>
+        <ol id="superLegs"></ol>
+        <div class="combo-sum" id="superSum"></div>
+        <p class="note" id="superNote"></p>
+      </div>
+      <p class="note" id="bestSub"></p>
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Sorteren">
+          <button id="b-p" aria-pressed="true">Veiligste</button>
+          <button id="b-lift" aria-pressed="false">Opvallendst</button>
+          <button id="b-val" aria-pressed="false">Value</button>
+        </div>
+        <div class="filters" id="bestFilters" role="group" aria-label="Markten">
+          <button data-g="all" aria-pressed="true">Alles</button>
+          <button data-g="res" aria-pressed="false">Uitslag</button>
+          <button data-g="goals" aria-pressed="false">Goals</button>
+          <button data-g="corners" aria-pressed="false">Corners</button>
+          <button data-g="cards" aria-pressed="false">Kaarten</button>
+          <button data-g="shots" aria-pressed="false">Schoten</button>
+        </div>
+      </div>
+      <div class="bestopts">
+        <label for="bestMin">Minstens <select class="select" id="bestMin"><option value="0.5">50%</option><option value="0.6">60%</option><option value="0.7" selected>70%</option><option value="0.8">80%</option></select> kans</label>
+        <label><input type="checkbox" id="bestOne" checked> max. 1 bet per match</label>
+        <label><input type="checkbox" id="bestSig"> enkel signaal sterk of matig</label>
+      </div>
+      <div class="combo" id="bestCombo" hidden>
+        <div class="combo-head"><h3>Combi-voorstel</h3>
+          <div class="seg" role="group" aria-label="Aantal bets in de combi" id="bestLegs">
+            <button data-n="2" aria-pressed="false">2</button><button data-n="3" aria-pressed="true">3</button><button data-n="4" aria-pressed="false">4</button><button data-n="5" aria-pressed="false">5</button>
+          </div>
+        </div>
+        <ol id="comboLegs"></ol>
+        <div class="combo-sum" id="comboSum"></div>
+        <p class="note">Bets uit verschillende matchen, dus de kansen worden vermenigvuldigd. De marge van de bookmaker telt per bet mee: een combi kost gemiddeld meer dan losse bets.</p>
+      </div>
+      <ul class="bets" id="bestList"></ul>
+    </div>
+  </section>
+
+  <section id="p-form" role="tabpanel" aria-labelledby="t-form" hidden>
+    <div class="formgrid" id="formgrid"></div>
+  </section>
+
+  <section id="p-hist" role="tabpanel" aria-labelledby="t-hist" hidden>
+    <div class="hist">
+      <div class="lead">
+        <h2>Hoe vaak klopt een reeks echt?</h2>
+        <p id="histLead"></p>
+      </div>
+      <div class="takeaways" id="takeaways"></div>
+      <div class="panel">
+        <div style="display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; justify-content:space-between">
+          <h3>8 op 10 is geen 80%</h3>
+          <select class="select" id="histMarket" aria-label="Markt"></select>
+        </div>
+        <div class="legend"><span>Wat er de volgende match echt gebeurde</span><span class="naive">Wat de reeks lijkt te zeggen</span><span class="avg">Gemiddelde van alle matchen</span></div>
+        <div id="chart" role="img" aria-label="Grafiek: hit rate na een reeks van k op 10"></div>
+        <p class="note" id="chartNote"></p>
+        <div class="tbl-wrap"><table class="streaktbl" id="streakTbl"></table></div>
+      </div>
+      <div class="panel">
+        <h3>Wint iemand hiermee geld?</h3>
+        <p class="note" id="btLead"></p>
+        <div class="tbl-wrap"><table id="btTbl"></table></div>
+      </div>
+      <div class="method" id="method"></div>
+    </div>
+  </section>
+
+  <footer>
+    <div>StreakScout is een hulpje om reeksen snel te lezen. Het voorspelt niet beter dan de bookmaker en garandeert geen winst. Zet enkel in wat je kan missen.</div>
+    <div>Last van gokken? De Druglijn: <span class="num">078 15 10 20</span> · <a href="https://www.druglijn.be" target="_blank" rel="noopener">druglijn.be</a></div>
+  </footer>
+</div>
+
+<div class="slip" id="slip" hidden>
+  <div class="slip-in">
+    <span class="t">Combi</span>
+    <div class="kv"><span class="l">Bets</span><span class="v" id="slipN">0</span></div>
+    <div class="kv"><span class="l">Kans (reeksen)</span><span class="v" id="slipP">–</span></div>
+    <div class="kv"><span class="l">Eerlijke odd</span><span class="v" id="slipFair">–</span></div>
+    <label class="kv"><span class="l">Combi-odd bookmaker</span><input id="slipOdd" inputmode="decimal" placeholder="bv. 4.50" aria-label="Combi-odd van je bookmaker"></label>
+    <div class="kv"><span class="l">Volgens reeksen</span><span class="v sv" id="slipVal">–</span></div>
+    <button id="slipClear">Leegmaken</button>
+    <div class="items" id="slipItems"></div>
+    <div class="warn" id="slipWarn" hidden></div>
+  </div>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const MODEL = /*__MODEL__*/null;
+const HIST = /*__HISTORY__*/null;
+</script>
+<script>
+/*__ENGINE__*/
+</script>
+<script>
+(function () {
+  const eng = SSEngine.create(DATA, MODEL);
+  const m = DATA.m, TEAMS = DATA.teams, tix = new Map(TEAMS.map((t, i) => [t, i]));
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("ss:" + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem("ss:" + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+  };
+
+  const DISPLAY = SSMarkets.DISPLAY;
+  const dn = (i) => DISPLAY[TEAMS[i]] || TEAMS[i];
+  const MON = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+  const dayDate = (d) => new Date(Date.UTC(2000, 0, 1) + d * 864e5);
+  const fmtD = (dt, year) => `${dt.getUTCDate()} ${MON[dt.getUTCMonth()]}${year ? " " + dt.getUTCFullYear() : ""}`;
+  const fmtISO = (s) => { const [y, mo, d] = s.split("-").map(Number); return `${d} ${MON[mo - 1]} ${y}`; };
+  const pct = (p) => Math.round(p * 100) + "%";
+  const odd = (p) => (p > 0 ? (1 / p).toFixed(2) : "–");
+  const nn = (x) => (x < 0 ? null : x);
+
+  // ---------- markets ----------
+  const MK = SSMarkets.MK;
+  const HLABEL = { o15: "Over 1.5 goals", o25: "Over 2.5 goals", o35: "Over 3.5 goals", btts: "Beide teams scoren",
+    draw: "Gelijkspel", htg: "Goal in de 1e helft", c85: "Over 8.5 corners", c95: "Over 9.5 corners", c105: "Over 10.5 corners",
+    k35: "Over 3.5 kaarten", k45: "Over 4.5 kaarten", win: "Ploeg wint", nolose: "Ploeg wint of gelijk", sc1: "Ploeg scoort",
+    sc2: "Ploeg scoort 2+", cs: "Ploeg houdt de nul", htwin: "Ploeg leidt bij de rust", mcorn: "Ploeg meer corners", c45: "Ploeg 5+ corners",
+    sh10: "Ploeg 10+ schoten", sh13: "Ploeg 13+ schoten", sot3: "Ploeg 3+ schoten op doel", sot5: "Ploeg 5+ schoten op doel", msh: "Ploeg meer schoten" };
+
+  const reliability = (ev, flip) => SSMarkets.reliability(HIST, ev, flip);
+  const SIG = { 3: "reeks houdt sterk stand", 2: "reeks houdt matig stand", 1: "reeks zegt weinig" };
+  const SIGSHORT = { 3: "sterk", 2: "matig", 1: "zwak" };
+
+  // ---------- state ----------
+  const state = {
+    div: "B1", H: null, A: null, sort: store.get("sort", "lift"), group: store.get("group", "all"),
+    open: new Set(), odds: store.get("odds", {}), slip: store.get("slip", []), tab: "bets",
+  };
+  const matchKey = () => `${TEAMS[state.H]}|${TEAMS[state.A]}`;
+
+  // ---------- header / pickers ----------
+  const leagueSel = $("league"), homeSel = $("home"), awaySel = $("away");
+  const divCodes = Object.keys(DATA.divNames);
+  const cupCodes = Object.keys(DATA.cups || {});
+  const isCup = (d) => !!(DATA.cups && DATA.cups[d]);
+  const FOREIGN = new Set(DATA.foreign || []);
+  leagueSel.innerHTML = `<optgroup label="Competities">${divCodes.map((c) => `<option value="${c}">${esc(DATA.divNames[c])}</option>`).join("")}</optgroup>`
+    + (cupCodes.length ? `<optgroup label="Europese bekers">${cupCodes.map((c) => `<option value="${c}">${esc(DATA.cups[c].name)}</option>`).join("")}</optgroup>` : "");
+
+  function fillTeams() {
+    let names = isCup(state.div) ? DATA.cups[state.div].teams : DATA.leagueTeams[state.div];
+    if (!names.length) names = [...new Set([...Object.values(DATA.leagueTeams).flat(), ...FOREIGN])];
+    const teams = names.map((t) => tix.get(t)).filter((i) => i != null).sort((a, b) => dn(a).localeCompare(dn(b), "nl"));
+    const opts = teams.map((i) => `<option value="${i}">${esc(dn(i))}</option>`).join("");
+    homeSel.innerHTML = opts; awaySel.innerHTML = opts;
+    return teams;
+  }
+  function setLeague(div, H, A) {
+    state.div = div; leagueSel.value = div;
+    const teams = fillTeams();
+    const fx = DATA.fixtures.filter((f) => f.div === div);
+    if (H == null) {
+      const ok = (t) => eng.homeDiv(tix.get(t)) != null || !!DATA.elo[t];
+      const pick = (div === "B1" && fx.find((f) => f.h === "Gent" && f.a === "Anderlecht"))
+        || fx.find((f) => ok(f.h) && ok(f.a) && (eng.homeDiv(tix.get(f.h)) != null && eng.homeDiv(tix.get(f.a)) != null)) || fx[0];
+      if (pick) { H = tix.get(pick.h); A = tix.get(pick.a); } else { H = teams[0]; A = teams[1]; }
+    }
+    state.H = H; state.A = A; homeSel.value = H; awaySel.value = A;
+    renderQuick(); renderAll();
+  }
+  leagueSel.addEventListener("change", () => setLeague(leagueSel.value));
+  homeSel.addEventListener("change", () => { state.H = +homeSel.value; if (state.H === state.A) { state.A = +[...awaySel.options].find((o) => +o.value !== state.H).value; awaySel.value = state.A; } renderQuick(); renderAll(); });
+  awaySel.addEventListener("change", () => { state.A = +awaySel.value; if (state.H === state.A) { state.H = +[...homeSel.options].find((o) => +o.value !== state.A).value; homeSel.value = state.H; } renderQuick(); renderAll(); });
+
+  function renderQuick() {
+    const fx = DATA.fixtures.filter((f) => f.div === state.div);
+    const q = $("quick");
+    if (!fx.length) { q.hidden = true; return; }
+    q.hidden = false;
+    const when = (w) => { const [d, t] = w.split(" "); const [, mo, dd] = d.split("-").map(Number); return `${["zo","ma","di","wo","do","vr","za"][new Date(d + "T12:00:00Z").getUTCDay()]} ${dd}/${mo}${t ? " " + t : ""}`; };
+    q.innerHTML = `<span class="lab">Komende matchen</span>` + fx.map((f, k) => {
+      const h = tix.get(f.h), a = tix.get(f.a);
+      const on = h === state.H && a === state.A;
+      return `<button class="qchip" data-k="${k}" aria-pressed="${on}">${esc(dn(h))} – ${esc(dn(a))}<small>${esc(when(f.when))}</small></button>`;
+    }).join("");
+    q.querySelectorAll(".qchip").forEach((b) => b.addEventListener("click", () => {
+      const f = fx[+b.dataset.k]; state.H = tix.get(f.h); state.A = tix.get(f.a);
+      homeSel.value = state.H; awaySel.value = state.A; renderQuick(); renderAll();
+    }));
+  }
+
+  function lastMatches(t, n) {
+    const L = eng.teamMatches.get(t) || [];
+    return L.slice(Math.max(0, L.length - n)).reverse();
+  }
+  function resultOf(i, t) {
+    const home = m.h[i] === t, gf = nn(home ? m.fh[i] : m.fa[i]), ga = nn(home ? m.fa[i] : m.fh[i]);
+    if (gf === null || ga === null) return null;
+    return gf > ga ? "W" : gf === ga ? "G" : "V";
+  }
+  function renderHeader() {
+    for (const [t, fid, mid] of [[state.H, "formH", "metaH"], [state.A, "formA", "metaA"]]) {
+      const lm = lastMatches(t, 5).reverse();
+      $(fid).innerHTML = lm.map((i) => { const r = resultOf(i, t); const opp = m.h[i] === t ? m.a[i] : m.h[i];
+        return `<span class="${r}" title="${esc(fmtD(dayDate(m.d[i])))} · ${m.h[i] === t ? "thuis" : "uit"} vs ${esc(dn(opp))} · ${m.fh[i]}-${m.fa[i]}">${r}</span>`; }).join("");
+      const elo = DATA.elo[TEAMS[t]];
+      const last = lastMatches(t, 1)[0];
+      const lg = eng.homeDiv(t);
+      $(mid).textContent = [elo ? `Elo ${Math.round(elo)}` : null,
+        isCup(state.div) && lg != null ? (DATA.divNames[DATA.divs[lg]] || null) : null,
+        last != null ? `laatste match ${fmtD(dayDate(m.d[last]))}` : "geen competitiedata"].filter(Boolean).join(" · ");
+    }
+    const le = DATA.leagueEnd[state.div];
+    const upd = DATA.updated ? `Bijgewerkt <b>${fmtISO(DATA.updated)}</b>` : "";
+    if (!le) { $("dataChip").innerHTML = upd + " · reeksen uit de competitiematchen van beide ploegen"; return; }
+    $("dataChip").innerHTML = upd + " · " + (!le.stats
+      ? `uitslagen t/m <b>${fmtISO(le.goals)}</b> · geen corners, kaarten, schoten of ruststanden voor deze competitie`
+      : le.goals === le.stats
+      ? `data t/m <b>${fmtISO(le.goals)}</b>`
+      : `uitslagen t/m <b>${fmtISO(le.goals)}</b> · corners, kaarten & schoten t/m <b>${fmtISO(le.stats)}</b>`);
+  }
+
+  // ---------- bets ----------
+  function zscore(k, n, b) { if (n < 3) return 0; return (k - n * b) / Math.sqrt(n * b * (1 - b)); }
+  function tip(i, t) {
+    const home = m.h[i] === t, opp = home ? m.a[i] : m.h[i];
+    const parts = [`${fmtD(dayDate(m.d[i]), true)}`, `${home ? "thuis" : "uit"} vs ${dn(opp)}`, `${m.fh[i]}-${m.fa[i]}`];
+    const ch = nn(m.ch[i]), ca = nn(m.ca[i]), kh = nn(m.kh[i]), ka = nn(m.ka[i]);
+    if (ch !== null && ca !== null) parts.push(`${home ? ch : ca}-${home ? ca : ch} corners`);
+    if (kh !== null && ka !== null) parts.push(`${kh + ka} kaarten`);
+    const sh = m.sh ? nn(m.sh[i]) : null, sa = m.sa ? nn(m.sa[i]) : null, th = m.th ? nn(m.th[i]) : null, ta = m.ta ? nn(m.ta[i]) : null;
+    if (sh !== null && sa !== null) parts.push(`${home ? sh : sa}-${home ? sa : sh} schoten` + (th !== null && ta !== null ? ` (${home ? th : ta}-${home ? ta : th} op doel)` : ""));
+    return parts.join(" · ");
+  }
+
+  let NOTICE = "", LAST_R = null, FO = null;
+  // bookmaker odds for this fixture (football-data.co.uk + The Odds API), if any
+  const fixtureOdds = (Hi, Ai) => SSMarkets.fixtureOdds(DATA, TEAMS[Hi], TEAMS[Ai], (DATA.updated || "").slice(0, 10));
+  const marketFor = SSMarkets.marketFor;
+  function fmtStamp(t) {
+    if (!t) return "";
+    const d = new Date(t.replace("Z", ":00Z"));
+    if (isNaN(d)) return t;
+    return d.toLocaleString("nl-BE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" });
+  }
+  function buildBets() {
+    const res = computeBets(state.H, state.A, state.div);
+    NOTICE = res.notice; LAST_R = res.r; FO = res.fo;
+    return res.bets;
+  }
+  /** all bets for one fixture; no global state touched */
+  function computeBets(H, A, divCode) {
+    const fo = fixtureOdds(H, A), mkey = `${TEAMS[H]}|${TEAMS[A]}`;
+    const hN = dn(H), aN = dn(A);
+    let div = DATA.divs.indexOf(divCode), opts = {}, NOTICE = "";
+    if (isCup(divCode)) {
+      const dH = eng.homeDiv(H), dA = eng.homeDiv(A);
+      const eH = DATA.elo[TEAMS[H]], eA = DATA.elo[TEAMS[A]];
+      const missing = [[H, dH, eH], [A, dA, eA]].filter(([, d, e]) => d == null && !e).map(([t]) => dn(t));
+      if ((dH == null && dA == null) || missing.length) {
+        NOTICE = `Geen analyse mogelijk: voor ${missing.join(" en ") || (hN + " en " + aN)} hebben we geen competitiedata en geen Elo-sterkte.`;
+        return { bets: [], notice: NOTICE, r: null, fo };
+      }
+      opts = { divH: dH ?? dA, divA: dA ?? dH };
+      div = opts.divH;
+      const parts = ["Europese match: de reeksen komen uit de competitiematchen van beide ploegen, de Elo-sterkte vergelijkt de competities."];
+      for (const [t, d, o] of [[H, dH, A], [A, dA, H]]) {
+        if (d == null) parts.push(`Voor ${dn(t)} hebben we geen recente competitiematchen. De kans steunt dan op de Elo-sterkte (mogelijk verouderd) en de reeksen van ${dn(o)}.`);
+      }
+      NOTICE = parts.join(" ");
+    } else if (divCode === "USA") {
+      NOTICE = "MLS: geen Elo-sterkte en geen corners, kaarten, schoten of ruststanden, dus enkel uitslag- en goalmarkten. Het model is getraind op Europese competities; voor de MLS rekent het met het MLS-gemiddelde.";
+    }
+    const r = eng.analyse(H, A, div, opts);
+    const bets = [];
+    for (const mk of MK) {
+      const src = r[mk.src || mk.id];
+      if (!src || !Number.isFinite(src.p)) continue;
+      const fl = !!mk.flip;
+      const p = fl ? 1 - src.p : src.p, base = fl ? 1 - src.base : src.base;
+      const f = src.f;
+      let items;
+      if (src.kind === "match") {
+        items = [
+          { who: `${hN} · laatste ${f.H.list.length}`, roll: f.H, team: H, st: f.Hst },
+          { who: `${hN} · thuis`, roll: f.Hv, team: H },
+          { who: `${aN} · laatste ${f.A.list.length}`, roll: f.A, team: A, st: f.Ast },
+          { who: `${aN} · uit`, roll: f.Av, team: A },
+          { who: "Onderling", roll: f.h2h, team: H },
+        ];
+      } else {
+        const T = src.team, O = src.opp, tN = dn(T), oN = dn(O);
+        items = [
+          { who: `${tN} · laatste ${f.T.list.length}`, roll: f.T, team: T, st: f.Tst },
+          { who: `${tN} · ${src.home ? "thuis" : "uit"}`, roll: f.Tv, team: T },
+          { who: `Tegen ${oN} · laatste ${f.O.list.length}`, roll: f.O, team: O, st: f.Ost },
+          { who: `Tegen ${oN} · ${src.home ? "uit" : "thuis"}`, roll: f.Ov, team: O },
+          { who: "Onderling", roll: f.h2h, team: T },
+        ];
+      }
+      items = items.map((it) => {
+        const list = it.roll.list.map((x) => ({ i: x.i, v: x.v === null ? null : fl ? 1 - x.v : x.v }));
+        const n = it.roll.n, k = fl ? n - it.roll.k : it.roll.k;
+        const st = it.st == null ? 0 : fl ? -it.st : it.st;
+        return { ...it, list, k, n, st, z: zscore(k, n, base) };
+      });
+      const ev = src.ev;
+      const rel = reliability(ev, fl);
+      const best = items.filter((x) => x.n >= 3).sort((a, b) => b.z - a.z)[0];
+      const worst = items.filter((x) => x.n >= 3).sort((a, b) => a.z - b.z)[0];
+      bets.push({ id: mk.id, g: mk.g, label: mk.l(hN, aN), p, base, items, rel, best, worst, ev, flip: fl, market: marketFor(mk.id, fo), mkey });
+    }
+    return { bets, notice: NOTICE, r, fo };
+  }
+
+  let BETS = [];
+  function oddsKey(id) { return `${matchKey()}|${id}`; }
+  function valueOf(b) {
+    const o = parseFloat(String(state.odds[`${b.mkey || matchKey()}|${b.id}`] || "").replace(",", "."));
+    if (o > 1) return { o, edge: b.p * o - 1, own: true };
+    if (b.market) return { o: b.market.best.o, edge: b.p * b.market.best.o - 1, bk: b.market.best.bk };
+    return null;
+  }
+  function valText(v, what) {
+    if (!v) return ["", ""];
+    const at = v.own ? "" : ` bij ${v.bk} ${v.o.toFixed(2)}`;
+    const pctx = Math.round(v.edge * 100);
+    if (v.edge > 0.03) return [`+${pctx}% ${what}${at}`, "pos"];
+    if (v.edge < -0.03) return [`${pctx}% ${what}${at}`, "neg"];
+    return [`rond de eerlijke odd${at}`, ""];
+  }
+  function sortBets(list) {
+    const s = state.sort;
+    const by = s === "p" ? (b) => b.p : s === "val" ? (b) => { const v = valueOf(b); return v ? 10 + v.edge : b.p - b.base; } : (b) => b.p - b.base;
+    return list.slice().sort((a, b) => by(b) - by(a));
+  }
+  const NOTES = {
+    lift: "Gesorteerd op hoeveel de kans voor deze match afwijkt van een gemiddelde match in deze competitie. Bovenaan staat waar de reeksen het meest over zeggen.",
+    p: "Gesorteerd op kans. Bovenaan staan de veiligste bets, die bij de bookmaker ook de laagste odds hebben.",
+    val: "Voor 1X2 en over/under 2.5 vult de app automatisch de beste gevonden odd in (Unibet, Pinnacle, Bet365 en andere). Geeft jouw bookmaker, bv. Napoleon, een andere prijs, vul die dan zelf in. Ligt de odd boven de eerlijke odd, dan denken de reeksen dat de bet meer kans heeft dan de bookmaker. Historisch was dat geen winstgevende strategie (zie Kloppen reeksen?).",
+  };
+
+  function whyLine(b) {
+    const fmt = (x) => `<b>${esc(x.who.replace(/ · laatste \d+/, ""))}</b> ${x.k}/${x.n}`;
+    const parts = [];
+    if (b.best && b.best.z > 0.5) parts.push(fmt(b.best));
+    if (b.worst && b.worst.z < -0.8 && b.worst !== b.best) parts.push(parts.length ? `maar ${fmt(b.worst)}` : `tegen: ${fmt(b.worst)}`);
+    parts.push(`gemiddeld ${pct(b.base)}`);
+    return parts.join(" · ");
+  }
+
+  function renderBets() {
+    const ul = $("bets");
+    $("matchNote").hidden = !NOTICE; $("matchNote").textContent = NOTICE;
+    renderPlayers();
+    // hide market groups this competition has no data for (e.g. corners and cards in the MLS)
+    for (const g of ["corners", "cards", "shots"]) {
+      const chip = document.querySelector(`.filters:not(#bestFilters) button[data-g="${g}"]`);
+      if (chip) chip.hidden = BETS.length > 0 && !BETS.some((b) => b.g === g) && state.group !== g;
+    }
+    ul.hidden = state.group === "players";
+    const list = sortBets(BETS.filter((b) => state.group === "all" || b.g === state.group));
+    $("sortNote").textContent = NOTES[state.sort];
+    if (!BETS.length) { ul.innerHTML = `<li class="empty">${esc(NOTICE || "Geen gegevens voor deze match.")}</li>`; return; }
+    if (!list.length) { ul.innerHTML = `<li class="empty">Geen gegevens voor deze markten. Corners, kaarten en schoten zitten niet voor elke competitie in de data.</li>`; return; }
+    const inSlip = new Set(state.slip.map((s) => s.k));
+    ul.innerHTML = list.map((b) => {
+      const open = state.open.has(b.id);
+      const v = valueOf(b), sk = oddsKey(b.id);
+      const [valTxt, valCls] = valText(v, "volgens reeksen");
+      const mk = b.market;
+      return `<li class="bet" data-id="${b.id}" data-open="${open}">
+        <div class="bet-row">
+          <button class="bet-toggle" aria-expanded="${open}" aria-controls="d-${b.id}">
+            <span class="bet-name"><span class="chev" aria-hidden="true">▶</span>${esc(b.label)}<span class="sig s${b.rel.lvl}" title="${SIG[b.rel.lvl]}: na 8+ op 10 kwam deze markt historisch ${b.rel.lift >= 0 ? "+" : ""}${Math.round(b.rel.lift * 100)} procentpunt vaker uit dan gemiddeld">signaal ${SIGSHORT[b.rel.lvl]}</span></span>
+            <span class="bet-why">${whyLine(b)}</span>
+          </button>
+          <div class="prob" aria-label="Kans ${pct(b.p)}, competitiegemiddelde ${pct(b.base)}">
+            <span class="pct">${pct(b.p)}<small>${b.p - b.base >= 0 ? "+" : "−"}${Math.abs(Math.round((b.p - b.base) * 100))}</small></span>
+            <span class="bar"><i style="width:${(b.p * 100).toFixed(1)}%"></i><b style="left:${(b.base * 100).toFixed(1)}%"></b></span>
+            ${mk ? `<span class="mkt">markt ${pct(mk.pMkt)}</span>` : ""}
+          </div>
+          <div class="fair"><span class="l">eerlijke odd</span><span class="v num">${odd(b.p)}</span>${mk ? `<span class="bk">beste <b>${mk.best.o.toFixed(2)}</b> ${esc(mk.best.bk)}</span>` : ""}</div>
+          <div class="oddbox">
+            <input id="odd-${b.id}" data-k="${esc(sk)}" inputmode="decimal" placeholder="${mk ? "andere odd" : "jouw odd"}" aria-label="Odd van je bookmaker voor ${esc(b.label)}" value="${esc(state.odds[sk] || "")}">
+            <button class="add" data-id="${b.id}" aria-pressed="${inSlip.has(sk)}">${inSlip.has(sk) ? "✓ combi" : "+ combi"}</button>
+            <span class="val ${valCls}" id="val-${b.id}">${valTxt}</span>
+          </div>
+        </div>
+        <div class="detail" id="d-${b.id}" ${open ? "" : "hidden"}>${open ? detailHTML(b) : ""}</div>
+      </li>`;
+    }).join("");
+  }
+
+  function detailHTML(b) {
+    const rows = b.items.map((it) => {
+      const dots = it.list.map((x) => `<span class="dot ${x.v === null ? "n" : x.v ? "h" : ""}" title="${esc(tip(x.i, it.team))}${x.v === null ? " · geen data" : x.v ? " · ja" : " · nee"}"></span>`).join("") || `<span class="streak">nog geen matchen</span>`;
+      const zc = it.n < 3 ? "eq" : it.z >= 1 ? "up" : it.z <= -1 ? "dn" : "eq";
+      const ztxt = it.n < 3 ? "–" : it.z >= 1 ? "boven" : it.z <= -1 ? "onder" : "normaal";
+      const stTxt = Math.abs(it.st) >= 3 ? `<span class="streak">${Math.abs(it.st)}× op rij ${it.st > 0 ? "ja" : "nee"}</span>` : "";
+      return `<div class="srow"><span class="who" title="${esc(it.who)}">${esc(it.who)}${stTxt}</span><span class="dots">${dots}</span><span class="frac">${it.n ? `${it.k}/${it.n}` : "–"}</span><span class="z ${zc}">${ztxt}</span></div>`;
+    }).join("");
+    const mk = b.market;
+    const oddsHTML = mk ? `<div class="oddstbl">${mk.list.map((x, j) => `<span class="${j === 0 ? "top" : ""}">${esc(x.bk)}<b class="num">${x.o.toFixed(2)}</b></span>`).join("")}</div>
+      <div class="dsum"><span>Marktkans <b class="num">${pct(mk.pMkt)}</b> (${esc(mk.refBk)}, zonder marge)</span><span>Reeksen <b class="num">${pct(b.p)}</b></span><span>Odds van ${esc(fmtStamp(mk.t))}</span>${mk.derived ? "<span>Dubbele kans: odd afgeleid uit de 1X2-odds, de echte odd ligt meestal iets lager</span>" : ""}</div>` : "";
+    return `<div class="strips">${rows}</div>${oddsHTML}
+      <div class="dsum"><span>Kans volgens reeksen <b class="num">${pct(b.p)}</b></span><span>Gemiddeld in deze competitie <b class="num">${pct(b.base)}</b></span><span>Eerlijke odd <b class="num">${odd(b.p)}</b></span><span>Groen = ja, grijs = nee, open = geen data. Oudste links.</span></div>`;
+  }
+
+  $("bets").addEventListener("click", (e) => {
+    const tg = e.target.closest(".bet-toggle");
+    if (tg) {
+      const li = tg.closest(".bet"), id = li.dataset.id, b = BETS.find((x) => x.id === id);
+      const open = !state.open.has(id);
+      open ? state.open.add(id) : state.open.delete(id);
+      li.dataset.open = open; tg.setAttribute("aria-expanded", open);
+      const d = $("d-" + id); d.hidden = !open; if (open) d.innerHTML = detailHTML(b);
+      return;
+    }
+    const add = e.target.closest(".add");
+    if (add) {
+      const b = BETS.find((x) => x.id === add.dataset.id), k = oddsKey(b.id);
+      const at = state.slip.findIndex((s) => s.k === k);
+      if (at >= 0) state.slip.splice(at, 1);
+      else state.slip.push({ k, match: matchKey(), label: `${dn(state.H)} – ${dn(state.A)}: ${b.label}`, p: b.p });
+      store.set("slip", state.slip);
+      add.setAttribute("aria-pressed", at < 0); add.textContent = at < 0 ? "✓ combi" : "+ combi";
+      renderSlip();
+    }
+  });
+  $("bets").addEventListener("input", (e) => {
+    const inp = e.target.closest("input[data-k]"); if (!inp) return;
+    state.odds[inp.dataset.k] = inp.value.trim(); store.set("odds", state.odds);
+    const id = inp.id.slice(4), b = BETS.find((x) => x.id === id), [t, c] = valText(valueOf(b), "volgens reeksen"), el = $("val-" + id);
+    el.className = "val " + c;
+    el.textContent = t;
+  });
+  $("bets").addEventListener("change", (e) => { if (e.target.matches("input[data-k]") && state.sort === "val") renderBets(); });
+
+  function setSort(s) { state.sort = s; store.set("sort", s); for (const [id, k] of [["s-lift", "lift"], ["s-p", "p"], ["s-val", "val"]]) $(id).setAttribute("aria-pressed", s === k); renderBets(); }
+  $("s-lift").onclick = () => setSort("lift"); $("s-p").onclick = () => setSort("p"); $("s-val").onclick = () => setSort("val");
+  document.querySelectorAll(".filters button").forEach((btn) => btn.addEventListener("click", () => {
+    state.group = btn.dataset.g; store.set("group", state.group);
+    document.querySelectorAll(".filters button").forEach((x) => x.setAttribute("aria-pressed", x === btn)); renderBets();
+  }));
+
+  // ---------- players (anytime scorer, Jupiler Pro League only) ----------
+  const SEASON_START = (() => { const u = DATA.updated || DATA.dataEnd; const y = +u.slice(0, 4), mo = +u.slice(5, 7);
+    return Math.round((Date.UTC(mo >= 7 ? y : y - 1, 6, 1) - Date.UTC(2000, 0, 1)) / 864e5); })();
+  function teamSeason(t, divIdx) {
+    let n = 0, gf = 0;
+    for (const i of eng.teamMatches.get(t) || []) {
+      if (m.d[i] < SEASON_START || m.v[i] !== divIdx) continue;
+      const g = nn(m.h[i] === t ? m.fh[i] : m.fa[i]);
+      if (g !== null) { n++; gf += g; }
+    }
+    return { n, gf };
+  }
+  let PLAYERS = [];
+  function buildPlayers() {
+    const P = DATA.players && DATA.players.B1;
+    if (!P || !LAST_R) return [];
+    const b1 = DATA.divs.indexOf("B1"), out = [];
+    for (const [t, side] of [[state.H, "H"], [state.A, "A"]]) {
+      const rows = P.rows.filter((r) => tix.get(r[0]) === t);
+      const sc = LAST_R["sc1@" + side];
+      if (!rows.length || !sc || !Number.isFinite(sc.p)) continue;
+      const ts = teamSeason(t, b1);
+      if (ts.n < 2) continue;
+      const lamTeam = -Math.log(1 - Math.min(0.97, sc.p));
+      const avg = (ts.gf + 1.4 * 2) / (ts.n + 2);
+      const factor = Math.min(1.6, Math.max(0.6, lamTeam / avg));
+      for (const [, name, g, mins, pen] of rows) {
+        const g90 = (g + 0.3) / (mins / 90 + 3);
+        const expMin = Math.min(90, mins / ts.n);
+        const p = 1 - Math.exp(-g90 * (expMin / 90) * factor);
+        out.push({ id: "pl:" + name, name, team: t, g, mins, pen, p, expMin, label: `${name} scoort`, mkey: matchKey() });
+      }
+    }
+    return out;
+  }
+  function renderPlayers() {
+    const wrap = $("playersWrap"), ul = $("players");
+    const show = PLAYERS.length && (state.group === "all" || state.group === "goals" || state.group === "players");
+    wrap.hidden = !show;
+    if (!show) return;
+    $("playersMeta").textContent = `topschutters t/m ${fmtISO(DATA.players.B1.updated)}`;
+    const by = state.sort === "val" ? (x) => { const v = valueOf(x); return v ? 10 + v.edge : x.p; } : (x) => x.p;
+    const inSlip = new Set(state.slip.map((s) => s.k));
+    ul.innerHTML = PLAYERS.slice().sort((a, b) => by(b) - by(a)).map((x) => {
+      const v = valueOf(x), sk = oddsKey(x.id);
+      const valTxt = v ? (v.edge > 0.03 ? `+${Math.round(v.edge * 100)}% volgens schatting` : v.edge < -0.03 ? `${Math.round(v.edge * 100)}% volgens schatting` : "rond de eerlijke odd") : "";
+      const valCls = v ? (v.edge > 0.03 ? "pos" : v.edge < -0.03 ? "neg" : "") : "";
+      return `<li class="bet" data-id="${esc(x.id)}">
+        <div class="bet-row">
+          <div class="bet-toggle" style="cursor:default">
+            <span class="bet-name">${esc(x.name)}<span class="pl-team">${esc(dn(x.team))}</span></span>
+            <span class="bet-why">${x.g} goal${x.g === 1 ? "" : "s"} in ${x.mins} min${x.pen ? ` (${x.pen} pen.)` : ""} · speelt gemiddeld ${Math.round(x.expMin)} min</span>
+          </div>
+          <div class="prob"><span class="pct">${pct(x.p)}</span><span class="bar"><i style="width:${(x.p * 100).toFixed(1)}%"></i></span></div>
+          <div class="fair"><span class="l">eerlijke odd</span><span class="v num">${odd(x.p)}</span></div>
+          <div class="oddbox">
+            <input data-k="${esc(sk)}" data-pid="${esc(x.id)}" inputmode="decimal" placeholder="jouw odd" aria-label="Odd van je bookmaker voor ${esc(x.label)}" value="${esc(state.odds[sk] || "")}">
+            <button class="add" data-pid="${esc(x.id)}" aria-pressed="${inSlip.has(sk)}">${inSlip.has(sk) ? "✓ combi" : "+ combi"}</button>
+            <span class="val ${valCls}">${valTxt}</span>
+          </div>
+        </div></li>`;
+    }).join("");
+  }
+  $("players").addEventListener("input", (e) => {
+    const inp = e.target.closest("input[data-pid]"); if (!inp) return;
+    state.odds[inp.dataset.k] = inp.value.trim(); store.set("odds", state.odds);
+    const x = PLAYERS.find((y) => y.id === inp.dataset.pid), v = valueOf(x), el = inp.parentElement.querySelector(".val");
+    el.className = "val " + (v ? (v.edge > 0.03 ? "pos" : v.edge < -0.03 ? "neg" : "") : "");
+    el.textContent = v ? (v.edge > 0.03 ? `+${Math.round(v.edge * 100)}% volgens schatting` : v.edge < -0.03 ? `${Math.round(v.edge * 100)}% volgens schatting` : "rond de eerlijke odd") : "";
+  });
+  $("players").addEventListener("click", (e) => {
+    const add = e.target.closest(".add"); if (!add) return;
+    const x = PLAYERS.find((y) => y.id === add.dataset.pid), k = oddsKey(x.id);
+    const at = state.slip.findIndex((s) => s.k === k);
+    if (at >= 0) state.slip.splice(at, 1);
+    else state.slip.push({ k, match: matchKey(), label: `${dn(state.H)} – ${dn(state.A)}: ${x.label}`, p: x.p });
+    store.set("slip", state.slip);
+    add.setAttribute("aria-pressed", at < 0); add.textContent = at < 0 ? "✓ combi" : "+ combi";
+    renderSlip();
+  });
+
+  // ---------- slip ----------
+  function renderSlip() {
+    const s = state.slip, el = $("slip");
+    el.hidden = !s.length;
+    if (!s.length) return;
+    const p = s.reduce((a, x) => a * x.p, 1);
+    $("slipN").textContent = s.length; $("slipP").textContent = p >= 0.1 ? pct(p) : (p * 100).toFixed(1) + "%";
+    $("slipFair").textContent = odd(p);
+    const o = parseFloat(String($("slipOdd").value).replace(",", "."));
+    const sv = $("slipVal");
+    if (o > 1) { const e = p * o - 1; sv.textContent = (e >= 0 ? "+" : "") + Math.round(e * 100) + "%"; sv.className = "v sv " + (e > 0.03 ? "pos" : ""); } else { sv.textContent = "–"; sv.className = "v sv"; }
+    $("slipItems").innerHTML = s.map((x) => `<span>${esc(x.label)} <span class="num">${pct(x.p)}</span></span>`).join("");
+    const per = {}; s.forEach((x) => (per[x.match] = (per[x.match] || 0) + 1));
+    const same = Object.values(per).some((c) => c > 1);
+    $("slipWarn").hidden = !same;
+    $("slipWarn").textContent = same ? "Twee bets uit dezelfde match hangen samen (bv. Over 2.5 en beide teams scoren). De echte combikans wijkt dan af van deze berekening." : "";
+  }
+  $("slipOdd").addEventListener("input", renderSlip);
+  $("slipClear").addEventListener("click", () => { state.slip = []; store.set("slip", []); renderSlip(); renderBets(); });
+
+  // ---------- form tab ----------
+  function renderForm() {
+    $("formgrid").innerHTML = [state.H, state.A].map((t) => {
+      const rows = lastMatches(t, 10).map((i) => {
+        const home = m.h[i] === t, opp = home ? m.a[i] : m.h[i], r = resultOf(i, t);
+        const gf = home ? m.fh[i] : m.fa[i], ga = home ? m.fa[i] : m.fh[i];
+        const hgf = nn(home ? m.hh[i] : m.ha[i]), hga = nn(home ? m.ha[i] : m.hh[i]);
+        const cf = nn(home ? m.ch[i] : m.ca[i]), ca = nn(home ? m.ca[i] : m.ch[i]);
+        const kk = nn(m.kh[i]) !== null && nn(m.ka[i]) !== null ? m.kh[i] + m.ka[i] : null;
+        return `<tr><td>${fmtD(dayDate(m.d[i]))}</td><td>${home ? "T" : "U"}</td><td>${esc(dn(opp))}</td><td class="num">${gf}-${ga}</td><td><span class="res ${r}">${r}</span></td>
+          <td class="num ${hgf === null ? "na" : ""}">${hgf === null ? "–" : `${hgf}-${hga}`}</td><td class="num ${cf === null ? "na" : ""}">${cf === null ? "–" : `${cf}-${ca}`}</td><td class="num ${kk === null ? "na" : ""}">${kk === null ? "–" : kk}</td></tr>`;
+      }).join("");
+      return `<div class="fcard"><h3>${esc(dn(t))}</h3><div class="tbl-wrap"><table>
+        <thead><tr><th>Datum</th><th>T/U</th><th>Tegen</th><th>Uitslag</th><th></th><th>Rust</th><th>Corners</th><th>Kaarten</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="8" class="na">Nog geen matchen in de data</td></tr>`}</tbody></table></div></div>`;
+    }).join("");
+  }
+
+  // ---------- history tab ----------
+  const histSel = $("histMarket");
+  const HORDER = ["o25", "btts", "o15", "o35", "htg", "c95", "c85", "c105", "k35", "k45", "win", "nolose", "sc1", "sc2", "cs", "htwin", "mcorn", "c45", "msh", "sh10", "sh13", "sot3", "sot5"];
+  histSel.innerHTML = HORDER.filter((e) => HIST.reality[e] && HIST.reality[e].by_k.length).map((e) => `<option value="${e}">${HLABEL[e]}</option>`).join("");
+
+  function drawChart() {
+    const ev = histSel.value, R = HIST.reality[ev], box = $("chart");
+    const W = Math.max(280, box.clientWidth || 600), Hh = W < 500 ? 240 : 300;
+    const pad = { l: 40, r: 16, t: 14, b: 34 };
+    const x = (k) => pad.l + (k / 10) * (W - pad.l - pad.r), y = (p) => pad.t + (1 - p) * (Hh - pad.t - pad.b);
+    const step = W < 420 ? 2 : 1;
+    let s = `<svg width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--f-body)">`;
+    for (const g of [0, 0.25, 0.5, 0.75, 1]) s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(g)}" y2="${y(g)}" stroke="var(--line)" stroke-width="1"/><text x="${pad.l - 8}" y="${y(g) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${g * 100}%</text>`;
+    for (let k = 0; k <= 10; k += step) s += `<text x="${x(k)}" y="${Hh - pad.b + 18}" text-anchor="middle" font-size="11" fill="var(--muted)">${k}/10</text>`;
+    s += `<line x1="${x(0)}" y1="${y(0)}" x2="${x(10)}" y2="${y(1)}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 5" fill="none"/>`;
+    s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(R.overall)}" y2="${y(R.overall)}" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="2 3" opacity=".7"/>`;
+    const pts = R.by_k.map((r) => [x(r.k), y(r.real), r]);
+    s += `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>`;
+    for (const [px, py, r] of pts) s += `<circle cx="${px}" cy="${py}" r="4" fill="var(--accent)"><title>${r.k}/10 in de laatste 10 → volgende match ${pct(r.real)} (${r.n.toLocaleString("nl-BE")} keer)</title></circle>`;
+    const last = pts[pts.length - 1];
+    if (last) s += `<text x="${Math.min(last[0], W - pad.r - 2)}" y="${last[1] - 10}" text-anchor="end" font-size="12" font-weight="600" fill="var(--accent)">${last[2].k}/10 → ${pct(last[2].real)}</text>`;
+    s += `<text x="${pad.l + 4}" y="${y(R.overall) - 6}" font-size="11" fill="var(--ink)" opacity=".8">gemiddeld ${pct(R.overall)}</text></svg>`;
+    box.innerHTML = s;
+    const top = R.by_k[R.by_k.length - 1];
+    const both = HIST.both[ev];
+    let note = `Op basis van ${R.by_k.reduce((a, r) => a + r.n, 0).toLocaleString("nl-BE")} momenten waarop een ploeg al 10 matchen gespeeld had, ${HIST.hist_from.slice(0, 4)} tot nu, 22 Europese competities.`;
+    if (top) note += ` Na ${top.k}/10 kwam het de volgende match ${pct(top.real)} van de keren uit, tegen ${pct(R.overall)} gemiddeld.`;
+    if (both && both.rows.length) { const b = both.rows[both.rows.length - 1]; note += ` Als béide ploegen ${b.t}+/10 hadden: ${pct(b.real)}.`; }
+    $("chartNote").textContent = note;
+    const st = R.by_streak;
+    $("streakTbl").innerHTML = st.length ? `<thead><tr><th>Reeks op rij</th>${st.map((r) => `<th class="num">${r.s}${r.plus ? "+" : ""}</th>`).join("")}</tr></thead>
+      <tbody><tr><td>Volgende match ja</td>${st.map((r) => `<td class="num">${pct(r.real)}</td>`).join("")}</tr></tbody>` : "";
+  }
+  histSel.addEventListener("change", drawChart);
+  let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (state.tab === "hist") drawChart(); }, 120); });
+
+  function renderHistStatic() {
+    const R = HIST.reality, bk = (ev, k) => (R[ev].by_k.find((r) => r.k === k) || {}).real;
+    const bt = HIST.backtest;
+    $("histLead").textContent = "Een ploeg met 8 op 10 over 2.5 voelt als een zekerheid. Hieronder zie je wat er historisch na zo'n reeks echt gebeurde, en wat je ermee verdiend zou hebben tegen echte odds.";
+    const goodBlind = bt.over25.blind_max.roi, b365Blind = bt.over25.blind_b365.roi;
+    $("takeaways").innerHTML = [
+      `<div class="tk"><span class="eyebrow">Goals</span><span class="big">${pct(bk("o25", 10))}<small>na 10/10 over 2.5</small></span><p>Gemiddeld gaat <b>${pct(R.o25.overall)}</b> van de matchen over 2.5. Een perfecte reeks voegt maar een paar procent toe.</p></div>`,
+      `<div class="tk"><span class="eyebrow">Kaarten</span><span class="big">${pct(bk("k35", 10))}<small>na 10/10 over 3.5</small></span><p>Tegen <b>${pct(R.k35.overall)}</b> gemiddeld. Kaarten, corners en ploegsterkte houden veel beter stand dan goals.</p></div>`,
+      `<div class="tk"><span class="eyebrow">X op rij</span><span class="big">≈ 0<small>extra gewicht</small></span><p>Zodra je weet hoeveel keer iets gebeurde in de laatste 10, voegt "zoveel keer op rij" bijna niets meer toe.</p></div>`,
+      `<div class="tk"><span class="eyebrow">Odds vergelijken</span><span class="big">${((goodBlind - b365Blind) * 100).toLocaleString("nl-BE", { maximumFractionDigits: 1 })}<small>procentpunt</small></span><p>Zoveel minder verlies op over 2.5 als je altijd de beste odd neemt in plaats van één vaste bookmaker.</p></div>`,
+    ].join("");
+    const d1 = (x) => x.toLocaleString("nl-BE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const f = (r) => r && r.n ? `<span class="roi ${r.roi < 0 ? "neg" : "pos"}">${r.roi >= 0 ? "+" : "−"}${d1(Math.abs(r.roi * 100))}%</span> <span style="color:var(--muted)">±${d1(r.se * 100)} · ${r.n.toLocaleString("nl-BE")}</span>` : "–";
+    const BTL = { over25: "Over 2.5 goals", under25: "Under 2.5 goals", homewin: "Thuisploeg wint", awaywin: "Uitploeg wint", draw: "Gelijkspel" };
+    $("btLead").textContent = `Elke bet 1 eenheid inzet, op ${bt.over25.n_matches.toLocaleString("nl-BE")} matchen vanaf juli 2023 (niet gebruikt om het model te maken). Rendement per inzet, met foutmarge en aantal bets. Bet365 is één bookmaker, "beste odd" is de hoogste odd van een 17-tal bookmakers.`;
+    $("btTbl").innerHTML = `<thead><tr><th>Markt</th><th>Alles blind<br>Bet365</th><th>Alles blind<br>beste odd</th><th>Reeksregel<br>beste odd</th><th>Value volgens<br>reeksen, Bet365</th><th>Beter voorspeld<br>door</th></tr></thead><tbody>` +
+      Object.entries(bt).map(([key, r]) => `<tr><td><b>${esc(BTL[key] || r.label)}</b><br><span style="color:var(--muted); font-size:12px">regel: ${esc(r.rule)}</span></td><td>${f(r.blind_b365)}</td><td>${f(r.blind_max)}</td><td>${f(r.streak_max)}</td><td>${f(r.value_b365)}</td><td>${r.ll_book < r.ll_model ? "bookmaker" : "reeksen"}</td></tr>`).join("") + `</tbody>`;
+    $("method").innerHTML = `<p><b>Hoe de kans berekend wordt.</b> Per markt een logistisch model op de hit rates van beide ploegen (laatste 10, laatste 6 thuis of uit, wat tegenstanders tegen hen haalden, onderlinge duels, de huidige reeks), het competitiegemiddelde en het Elo-verschil. Kleine aantallen worden naar het gemiddelde getrokken, zodat 2 op 2 niet als 100% telt. Getraind op 2008–2023 in 22 Europese competities en getest op de seizoenen erna.</p>
+      <p><b>Europese bekers.</b> Voor Champions, Europa en Conference League gebruikt StreakScout de competitiematchen van beide ploegen: de reeksen komen uit hun eigen competitie, het gemiddelde is dat van beide competities en de Elo-sterkte vergelijkt de niveaus. Ploegen uit competities zonder recente data steunen enkel op hun Elo.</p>
+      <p><b>MLS.</b> De uitslagen van 2026 komen per speeldag van voetbalkrant.com en zijn bij het toevoegen nagekeken tegen de officiële stand (alle 30 ploegen identiek); De reeksen steunen op dit seizoen. Voor de MLS is er geen Elo en geen corners, kaarten, schoten of ruststanden, dus enkel uitslag- en goalmarkten. Play-offs zitten er niet in.</p>
+      <p><b>Schoten en dubbele kans.</b> Schoten en schoten op doel per ploeg (10+, 13+, 3+ en 5+ op doel, meer schoten dan de tegenstander) volgen hetzelfde model; van alle markten houden schotreeksen het best stand. Ze komen uit dezelfde bron als corners en lopen dus even ver achter. Dubbele kans (1X, X2, 12): waar enkel 1X2-odds bekend zijn, wordt de odd daaruit afgeleid.</p>
+      <p><b>Spelers.</b> De bron publiceert enkel voor de Jupiler Pro League doelpunten en speelminuten per speler. De kans dat een speler scoort is een eenvoudige schatting op basis daarvan en is niet getest zoals de andere markten.</p>
+      <p><b>Odds.</b> Voor 1X2 en over/under 2.5 toont de app bookmakerodds van football-data.co.uk (onder meer Bet365, Pinnacle en de gemiddelde en hoogste marktprijs) en van The Odds API (onder meer Unibet, Pinnacle en William Hill). Odds van Belgische bookmakers zoals Napoleon zijn niet vrij beschikbaar; de beste gevonden prijs krijg je daar dus niet altijd. De marktkans is de kans die de odds van Pinnacle (of het marktgemiddelde) impliceren na het wegnemen van de marge.</p>
+      <p><b>Data.</b> Uitslagen, corners, kaarten en odds van football-data.co.uk via de open dataset Club-Football-Match-Data, Elo van ClubElo. Die dataset wordt maar een paar keer per jaar bijgewerkt. Daarom komen recente uitslagen en het speelschema elke ochtend van voetbalkrant.com. Elke update wordt eerst gecontroleerd tegen de matchen die al bekend zijn; klopt er iets niet, dan blijft die competitie op de vorige stand. Die recente uitslagen bevatten enkel goals, dus corners en kaarten lopen achter. Elo-sterkte van ClubElo tot 1 september, daarna na elke uitslag bijgewerkt met de Elo-formule (t/m ${fmtISO(DATA.eloDate)}).</p>`;
+  }
+
+  // ---------- best bets across the competition (for combis) ----------
+  const best = { sort: store.get("bestSort", "p"), group: "all", min: store.get("bestMin", 0.7), one: true, sig: false, legs: 3, cache: {} };
+  $("bestMin").value = String(best.min);
+  const DAYN = ["zo", "ma", "di", "wo", "do", "vr", "za"];
+  const whenTxt = (w) => { const [d, t] = w.split(" "); const [, mo, dd] = d.split("-").map(Number); return `${DAYN[new Date(d + "T12:00:00Z").getUTCDay()]} ${dd}/${mo}${t ? " " + t : ""}`; };
+  function todayISO() {
+    const n = new Date(), loc = new Date(n.getTime() - n.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+    const u = (DATA.updated || "").slice(0, 10);
+    return loc > u ? loc : u;
+  }
+  function bestCandidates() {
+    const key = state.div + "|" + todayISO();
+    if (best.cache[key]) return best.cache[key];
+    const out = [];
+    for (const f of DATA.fixtures.filter((x) => x.div === state.div && x.when.slice(0, 10) >= todayISO())) {
+      const H = tix.get(f.h), A = tix.get(f.a);
+      if (H == null || A == null) continue;
+      for (const b of computeBets(H, A, state.div).bets) out.push(Object.assign(b, { f, H, A }));
+    }
+    best.cache = { [key]: out };
+    return out;
+  }
+  function bestRanked() {
+    let list = bestCandidates().filter((b) => (best.group === "all" || b.g === best.group) && b.p >= best.min && (!best.sig || b.rel.lvl >= 2));
+    const by = best.sort === "lift" ? (b) => b.p - b.base : best.sort === "val" ? (b) => { const v = valueOf(b); return v ? v.edge : -9; } : (b) => b.p;
+    if (best.sort === "val") list = list.filter((b) => valueOf(b));
+    list = list.slice().sort((x, y) => by(y) - by(x));
+    if (best.one) { const seen = new Set(); list = list.filter((b) => !seen.has(b.mkey) && seen.add(b.mkey)); }
+    return list;
+  }
+  const slipLabel = (b) => `${dn(b.H)} – ${dn(b.A)}: ${b.label}`;
+  function renderSuper() {
+    const sb = DATA.superbet, card = $("superCard");
+    card.hidden = !sb || !sb.legs || sb.legs.length < 2;
+    if (card.hidden) return;
+    const lname = (d) => (DATA.divNames[d] || (DATA.cups[d] && DATA.cups[d].name) || d);
+    const nm = (t) => DISPLAY[t] || t;
+    $("superMeta").textContent = `alle competities · ${fmtISO(sb.from)} en ${fmtISO(sb.to)} · ${sb.legs.length} bets`;
+    const oddTxt = (l) => (l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}${l.derived ? " (afgeleid)" : ""}` : `±${l.odd.toFixed(2)} geschat`);
+    const altTxt = (l) => {
+      if (!l.alt) return "";
+      const short = l.alt.id.startsWith("nolose") ? (l.alt.id.endsWith("@H") ? "1X" : "X2") : l.alt.id.startsWith("win") ? "winst" : l.alt.label;
+      return `<span class="alt">liever dan ${esc(short)}: ${pct(l.alt.p)} kans voor ${l.alt.priced ? "" : "±"}${l.alt.odd.toFixed(2)}</span>`;
+    };
+    $("superLegs").innerHTML = sb.legs.map((l) => `<li><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))} · ${pct(l.p)} · ${oddTxt(l)}</small>${altTxt(l)}</li>`).join("");
+    const one = Math.round(1 / sb.p);
+    $("superSum").innerHTML = `<span>Combi-odd <b>${sb.odds.toFixed(2)}</b>${sb.allPriced ? "" : " (deels geschat)"}</span><span>Kans volgens reeksen <b>${(sb.p * 100).toFixed(1)}%</b> (1 op ${one})</span><button class="go" id="superGo">Zet in combi</button>`;
+    $("superNote").textContent = `Eén bet per match, enkel markten waar reeksen historisch standhouden. Per match wordt afgewogen wat het meest oplevert voor het risico: een zege geeft meer odd, 1X of X2 is veiliger. Van alle combinaties tot ±${sb.target}x is dit die met de grootste kans. ${sb.allPriced ? "" : "Waar geen bookmakerodd bekend is, staat een schatting (eerlijke odd min een gewone marge van 5%). "}Zo'n superbet komt gemiddeld maar 1 op ${one} keer binnen: zet er enkel een klein bedrag op.`;
+    $("superGo").onclick = () => {
+      for (const l of sb.legs) {
+        const k = `${l.mkey}|${l.id}`;
+        if (!state.slip.some((x) => x.k === k)) state.slip.push({ k, match: l.mkey, label: `${nm(l.h)} – ${nm(l.a)}: ${l.label}`, p: l.p });
+      }
+      store.set("slip", state.slip); renderSlip(); renderBest();
+    };
+  }
+  function renderBest() {
+    renderSuper();
+    const name = isCup(state.div) ? DATA.cups[state.div].name : DATA.divNames[state.div];
+    const nfx = new Set(bestCandidates().map((b) => b.mkey)).size;
+    $("bestSub").textContent = nfx
+      ? `De sterkste bets uit ${nfx} komende match${nfx === 1 ? "" : "en"} van de ${name}, om een combi mee te bouwen. Klik op een match om alle bets te zien.`
+      : `Geen komende matchen met analyse voor de ${name}.`;
+    for (const [id, k] of [["b-p", "p"], ["b-lift", "lift"], ["b-val", "val"]]) $(id).setAttribute("aria-pressed", best.sort === k);
+    const list = bestRanked(), inSlip = new Set(state.slip.map((x) => x.k));
+    $("bestList").innerHTML = list.length ? list.slice(0, 40).map((b, j) => {
+      const v = valueOf(b), [vt, vc] = valText(v, "volgens reeksen"), sk = `${b.mkey}|${b.id}`, mk = b.market;
+      return `<li class="bet"><div class="bet-row">
+        <div class="bet-toggle" style="cursor:default">
+          <span class="bet-name">${esc(b.label)}<span class="sig s${b.rel.lvl}">signaal ${SIGSHORT[b.rel.lvl]}</span></span>
+          <span class="bet-why"><button class="linkbtn" data-goto="${j}">${esc(whenTxt(b.f.when))} · ${esc(dn(b.H))} – ${esc(dn(b.A))}</button> · ${whyLine(b)}</span>
+        </div>
+        <div class="prob"><span class="pct">${pct(b.p)}<small>${b.p - b.base >= 0 ? "+" : "−"}${Math.abs(Math.round((b.p - b.base) * 100))}</small></span>
+          <span class="bar"><i style="width:${(b.p * 100).toFixed(1)}%"></i><b style="left:${(b.base * 100).toFixed(1)}%"></b></span>
+          ${mk ? `<span class="mkt">markt ${pct(mk.pMkt)}</span>` : ""}</div>
+        <div class="fair"><span class="l">eerlijke odd</span><span class="v num">${odd(b.p)}</span>${mk ? `<span class="bk">beste <b>${mk.best.o.toFixed(2)}</b> ${esc(mk.best.bk)}</span>` : ""}</div>
+        <div class="oddbox"><span></span><button class="add" data-j="${j}" aria-pressed="${inSlip.has(sk)}">${inSlip.has(sk) ? "✓ combi" : "+ combi"}</button><span class="val ${vc}">${vt}</span></div>
+      </div></li>`;
+    }).join("") : `<li class="empty">Geen bets die aan deze filters voldoen. Verlaag de minimumkans of kies "Alles".</li>`;
+    $("bestList")._list = list;
+    renderCombo(list);
+  }
+  function comboOdds(legs) {
+    if (!legs.every((b) => b.market)) return null;
+    const books = {};
+    for (const b of legs) for (const x of b.market.list) {
+      if (x.bk === "Gemiddelde markt" || x.bk === "Hoogste markt") continue;
+      (books[x.bk] = books[x.bk] || []).push(x.o);
+    }
+    let bestBk = null;
+    for (const [bk, os] of Object.entries(books)) {
+      if (os.length !== legs.length) continue;
+      const prod = os.reduce((a, o) => a * o, 1);
+      if (!bestBk || prod > bestBk.o) bestBk = { bk, o: prod };
+    }
+    return bestBk;
+  }
+  function renderCombo(list) {
+    const legs = [], seen = new Set();
+    for (const b of list) { if (seen.has(b.mkey)) continue; seen.add(b.mkey); legs.push(b); if (legs.length === best.legs) break; }
+    $("bestCombo").hidden = legs.length < 2;
+    if (legs.length < 2) return;
+    for (const btn of $("bestLegs").querySelectorAll("button")) btn.setAttribute("aria-pressed", +btn.dataset.n === best.legs);
+    const p = legs.reduce((a, b) => a * b.p, 1), co = comboOdds(legs);
+    $("comboLegs").innerHTML = legs.map((b) => `<li>${esc(b.label)} <small>· ${esc(dn(b.H))} – ${esc(dn(b.A))} · ${pct(b.p)}</small></li>`).join("");
+    const parts = [`<span>Samen <b>${p >= 0.1 ? pct(p) : (p * 100).toFixed(1) + "%"}</b> kans</span>`, `<span>Eerlijke odd <b>${odd(p)}</b></span>`];
+    if (co) parts.push(`<span>${esc(co.bk)} <b>${co.o.toFixed(2)}</b> · ${p * co.o - 1 >= 0 ? "+" : ""}${Math.round((p * co.o - 1) * 100)}% volgens reeksen</span>`);
+    parts.push(`<button class="go" id="comboGo">Zet ${legs.length} bets in combi</button>`);
+    $("comboSum").innerHTML = parts.join("");
+    $("comboGo").onclick = () => {
+      for (const b of legs) { const k = `${b.mkey}|${b.id}`; if (!state.slip.some((x) => x.k === k)) state.slip.push({ k, match: b.mkey, label: slipLabel(b), p: b.p }); }
+      store.set("slip", state.slip); renderSlip(); renderBest();
+    };
+  }
+  $("bestList").addEventListener("click", (e) => {
+    const list = $("bestList")._list || [];
+    const go = e.target.closest("[data-goto]");
+    if (go) {
+      const b = list[+go.dataset.goto];
+      state.H = b.H; state.A = b.A; homeSel.value = b.H; awaySel.value = b.A;
+      renderQuick(); renderAll(); setTab("bets");
+      const row = document.querySelector(`#bets .bet[data-id="${b.id}"]`); if (row) row.scrollIntoView({ block: "center" });
+      return;
+    }
+    const add = e.target.closest(".add");
+    if (add) {
+      const b = list[+add.dataset.j], k = `${b.mkey}|${b.id}`, at = state.slip.findIndex((x) => x.k === k);
+      if (at >= 0) state.slip.splice(at, 1); else state.slip.push({ k, match: b.mkey, label: slipLabel(b), p: b.p });
+      store.set("slip", state.slip); renderSlip(); renderBest();
+    }
+  });
+  for (const [id, k] of [["b-p", "p"], ["b-lift", "lift"], ["b-val", "val"]]) $(id).addEventListener("click", () => { best.sort = k; store.set("bestSort", k); renderBest(); });
+  $("bestFilters").querySelectorAll("button").forEach((btn) => btn.addEventListener("click", () => {
+    best.group = btn.dataset.g; $("bestFilters").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === btn)); renderBest();
+  }));
+  $("bestMin").addEventListener("change", () => { best.min = +$("bestMin").value; store.set("bestMin", best.min); renderBest(); });
+  $("bestOne").addEventListener("change", () => { best.one = $("bestOne").checked; renderBest(); });
+  $("bestSig").addEventListener("change", () => { best.sig = $("bestSig").checked; renderBest(); });
+  $("bestLegs").addEventListener("click", (e) => { const b = e.target.closest("button[data-n]"); if (b) { best.legs = +b.dataset.n; renderBest(); } });
+
+  // ---------- tabs ----------
+  const TABS = { bets: ["t-bets", "p-bets"], best: ["t-best", "p-best"], form: ["t-form", "p-form"], hist: ["t-hist", "p-hist"] };
+  function setTab(t) {
+    state.tab = t;
+    for (const [k, [tb, pn]] of Object.entries(TABS)) { $(tb).setAttribute("aria-selected", k === t); $(pn).hidden = k !== t; }
+    if (t === "hist") drawChart();
+    if (t === "form") renderForm();
+    if (t === "best") renderBest();
+  }
+  for (const [k, [tb]] of Object.entries(TABS)) $(tb).addEventListener("click", () => setTab(k));
+
+  function renderAll() {
+    renderHeader();
+    BETS = buildBets();
+    PLAYERS = buildPlayers();
+    renderBets();
+    if (state.tab === "form") renderForm();
+    if (state.tab === "best") renderBest();
+  }
+
+  // init
+  for (const [id, k] of [["s-lift", "lift"], ["s-p", "p"], ["s-val", "val"]]) $(id).setAttribute("aria-pressed", state.sort === k);
+  document.querySelectorAll(".filters button").forEach((x) => x.setAttribute("aria-pressed", x.dataset.g === state.group));
+  renderHistStatic();
+  setLeague("B1");
+  renderSlip();
+  if (location.hash === "#kloppen-reeksen") setTab("hist");
+})();
+</script>

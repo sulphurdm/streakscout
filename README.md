@@ -12,16 +12,15 @@ Geen garantie op winst: bookmakers zijn gemiddeld beter dan de reeksen. Zet enke
 
 ## Online zetten met GitHub Pages
 
-1. Maak een nieuwe repository, bijvoorbeeld `streakscout`.
-2. Upload de inhoud van deze map (de bestanden zelf, niet de map erboven) naar de hoofdmap van de repository, met `.nojekyll` erbij.
-3. Ga naar **Settings → Pages**, kies bij *Source* **Deploy from a branch**, branch **main** en map **/ (root)**, en klik **Save**.
-4. Na een minuutje staat de site op `https://<jouw-gebruikersnaam>.github.io/streakscout/`.
+1. De bestanden staan al in deze repository.
+2. Ga naar **Settings → Pages**, kies bij *Source* **Deploy from a branch**, branch **main** en map **/ (root)**, en klik **Save**.
+3. Na een minuutje staat de site op `https://<jouw-gebruikersnaam>.github.io/streakscout/`.
 
 Let op: een GitHub Pages-site is openbaar voor iedereen die de link heeft, ook als de repository privé is.
 
 ## Bijwerken
 
-De dagelijkse update draait als geplande taak en werkt de versie op Claude bij. Deze `index.html` is een momentopname van vandaag. Om de GitHub-versie bij te werken, vervang je `index.html` door een nieuwe build:
+Elke ochtend werkt een geplande taak de site bij en zet ze de nieuwe `index.html` automatisch in deze repository, zodat GitHub Pages altijd de versie van die dag toont. Zelf een build omzetten kan ook:
 
 ```
 python3 -I pipeline/gh_page.py <gebouwde streakscout.html> index.html

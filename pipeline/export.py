@@ -93,6 +93,11 @@ data = {
     },
 }
 
+# club crest ids (ESPN logo images), see logos.json
+_lp = Path(__file__).parent / "logos.json"
+_logos = json.load(open(_lp, encoding="utf-8")) if _lp.exists() else {}
+data["logos"] = {t: _logos[t] for t in teams if t in _logos}
+
 # current-season teams per app league (season of the league's latest match)
 cur = {}
 for dv in E.APP_DIVS:

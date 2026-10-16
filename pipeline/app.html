@@ -58,6 +58,17 @@ button, input, select { font: inherit; color: inherit }
   text-transform: uppercase; letter-spacing: .01em; padding: 2px 0; width: 100%; cursor: pointer; text-overflow: ellipsis; color: var(--ink) }
 .side.away .team-select { text-align: right; text-align-last: right }
 .team-select:hover { color: var(--accent) }
+.team-line { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0 }
+.side.away .team-line { flex-direction: row-reverse }
+.team-line .team-select { flex: 1 1 auto; min-width: 0 }
+.crest { flex: none; width: clamp(36px, 7vw, 52px); aspect-ratio: 1; max-width: 100%; border-radius: 50%; background: var(--sunk);
+  display: grid; place-items: center; position: relative; overflow: hidden }
+.crest b { font: 700 clamp(12px, 2.4vw, 16px)/1 var(--f-display); color: var(--muted); letter-spacing: .02em }
+.crest img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 2px }
+.crest.ok { background: transparent; border-radius: 0 }
+.crest.ok b { visibility: hidden }
+.qchip .mini { width: 16px; height: 16px; object-fit: contain; vertical-align: -3px; margin-right: 5px }
+.qchip .mini + .mini { margin-left: 2px }
 .vs { font: 600 18px/1 var(--f-display); color: var(--muted); padding-top: 26px; text-transform: uppercase }
 .form { display: flex; gap: 4px }
 .form span { width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; font: 600 12px/1 var(--f-mono) }
@@ -221,7 +232,7 @@ footer a { color: inherit }
   .vs { padding-top: 30px; font-size: 15px }
   .tab { font-size: 15px; padding: 10px 8px }
 }
-@media (max-width: 420px) { .matchup { grid-template-columns: 1fr; } .side.away { text-align: left; justify-items: start } .side.away .team-select { text-align: left; text-align-last: left } .vs { padding-top: 0 } }
+@media (max-width: 420px) { .matchup { grid-template-columns: 1fr; } .side.away { text-align: left; justify-items: start } .side.away .team-select { text-align: left; text-align-last: left } .side.away .team-line { flex-direction: row } .vs { padding-top: 0 } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }
 </style>
 
@@ -239,14 +250,14 @@ footer a { color: inherit }
     <div class="matchup">
       <div class="side home">
         <label class="eyebrow" for="home">Thuisploeg</label>
-        <select class="team-select" id="home"></select>
+        <div class="team-line"><span class="crest" id="crestH" aria-hidden="true"></span><select class="team-select" id="home"></select></div>
         <div class="form" id="formH"></div>
         <div class="meta" id="metaH"></div>
       </div>
       <div class="vs">vs</div>
       <div class="side away">
         <label class="eyebrow" for="away">Uitploeg</label>
-        <select class="team-select" id="away"></select>
+        <div class="team-line"><span class="crest" id="crestA" aria-hidden="true"></span><select class="team-select" id="away"></select></div>
         <div class="form" id="formA"></div>
         <div class="meta" id="metaA"></div>
       </div>
@@ -463,6 +474,31 @@ const HIST = /*__HISTORY__*/null;
   homeSel.addEventListener("change", () => { state.H = +homeSel.value; if (state.H === state.A) { state.A = +[...awaySel.options].find((o) => +o.value !== state.H).value; awaySel.value = state.A; } renderQuick(); renderAll(); });
   awaySel.addEventListener("change", () => { state.A = +awaySel.value; if (state.H === state.A) { state.H = +[...homeSel.options].find((o) => +o.value !== state.A).value; homeSel.value = state.H; } renderQuick(); renderAll(); });
 
+  // club crests: ESPN's logo images by team id (shown where the page may load outside images; otherwise initials)
+  const LOGO = DATA.logos || {};
+  const logoURL = (t) => (LOGO[TEAMS[t]] ? `https://a.espncdn.com/i/teamlogos/soccer/500/${LOGO[TEAMS[t]]}.png` : null);
+  const initials = (name) => {
+    const w = name.replace(/[^\p{L}\p{N} ]/gu, " ").split(/\s+/).filter((x) => x && !/^(fc|sc|cf|ac|as|sk|kv|kaa|rc|ud|cd|vfl|vfb|tsg|1)$/i.test(x));
+    if (!w.length) return name.slice(0, 2).toUpperCase();
+    return (w.length === 1 ? w[0].slice(0, 3) : w.slice(0, 2).map((x) => x[0]).join("")).toUpperCase();
+  };
+  function setCrest(el, t) {
+    el.classList.remove("ok");
+    el.innerHTML = `<b>${esc(initials(dn(t)))}</b>`;
+    const url = logoURL(t);
+    if (!url) return;
+    const img = new Image();
+    img.alt = ""; img.decoding = "async";
+    img.addEventListener("load", () => { if (el.contains(img)) el.classList.add("ok"); });
+    img.addEventListener("error", () => img.remove());
+    img.src = url;
+    el.appendChild(img);
+  }
+  function miniCrest(t) {
+    const url = logoURL(t);
+    return url ? `<img class="mini" src="${url}" alt="" loading="lazy" decoding="async">` : "";
+  }
+
   function renderQuick() {
     const fx = DATA.fixtures.filter((f) => f.div === state.div);
     const q = $("quick");
@@ -472,8 +508,9 @@ const HIST = /*__HISTORY__*/null;
     q.innerHTML = `<span class="lab">Komende matchen</span>` + fx.map((f, k) => {
       const h = tix.get(f.h), a = tix.get(f.a);
       const on = h === state.H && a === state.A;
-      return `<button class="qchip" data-k="${k}" aria-pressed="${on}">${esc(dn(h))} – ${esc(dn(a))}<small>${esc(when(f.when))}</small></button>`;
+      return `<button class="qchip" data-k="${k}" aria-pressed="${on}">${miniCrest(h)}${esc(dn(h))} – ${esc(dn(a))}${miniCrest(a) ? " " + miniCrest(a) : ""}<small>${esc(when(f.when))}</small></button>`;
     }).join("");
+    q.querySelectorAll("img.mini").forEach((im) => im.addEventListener("error", () => im.remove()));
     q.querySelectorAll(".qchip").forEach((b) => b.addEventListener("click", () => {
       const f = fx[+b.dataset.k]; state.H = tix.get(f.h); state.A = tix.get(f.a);
       homeSel.value = state.H; awaySel.value = state.A; renderQuick(); renderAll();
@@ -490,6 +527,7 @@ const HIST = /*__HISTORY__*/null;
     return gf > ga ? "W" : gf === ga ? "G" : "V";
   }
   function renderHeader() {
+    setCrest($("crestH"), state.H); setCrest($("crestA"), state.A);
     for (const [t, fid, mid] of [[state.H, "formH", "metaH"], [state.A, "formA", "metaA"]]) {
       const lm = lastMatches(t, 5).reverse();
       $(fid).innerHTML = lm.map((i) => { const r = resultOf(i, t); const opp = m.h[i] === t ? m.a[i] : m.h[i];

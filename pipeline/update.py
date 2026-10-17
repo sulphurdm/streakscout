@@ -499,11 +499,19 @@ def main():
             errs.append(f"maar {len(prow)} spelers gelezen")
         if not is_cup:
             # sanity: a team's players cannot have scored more league goals than the team did this season
-            allres = pd.concat([df[df.Division == code].rename(columns={"MatchDate": "date", "HomeTeam": "home", "AwayTeam": "away", "FTHome": "fh", "FTAway": "fa"})[["date", "home", "away", "fh", "fa"]],
-                                *[x[x["div"] == code][["date", "home", "away", "fh", "fa"]] for x in new_recent if len(x)]])
-            allres = allres[allres.date >= date(season_year(today), 7, 1)]
-            tg = {}
+            # team goals from every results source (git dataset, football-data season file, voetbalkrant), each match once
+            ren = {"MatchDate": "date", "HomeTeam": "home", "AwayTeam": "away", "FTHome": "fh", "FTAway": "fa"}
+            srcs = [df[df.Division == code].rename(columns=ren)[["date", "home", "away", "fh", "fa"]]]
+            if len(fd_all):
+                srcs.append(fd_all[fd_all.Division == code].rename(columns=ren)[["date", "home", "away", "fh", "fa"]])
+            srcs += [x[x["div"] == code][["date", "home", "away", "fh", "fa"]] for x in new_recent if len(x)]
+            allres = pd.concat(srcs).dropna(subset=["fh", "fa"])
+            allres = allres[allres.date >= date(season_year(today), 7, 1)].sort_values("date")
+            tg, seen = {}, {}
             for r in allres.itertuples():
+                if any(abs((r.date - d).days) <= 3 for d in seen.get((r.home, r.away), [])):
+                    continue  # same match from another source
+                seen.setdefault((r.home, r.away), []).append(r.date)
                 tg[r.home] = tg.get(r.home, 0) + int(r.fh)
                 tg[r.away] = tg.get(r.away, 0) + int(r.fa)
             per = {}

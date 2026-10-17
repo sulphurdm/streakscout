@@ -350,6 +350,14 @@ def main(argv=None):
                 access[dv] = err
                 report["errors"].append(f"{dv} lijst: {err}")
                 save()
+                if "do not have access to this season" in err:
+                    # a plan limit holds for every competition: don't spend more calls finding that out again
+                    for d in LEAGUES:
+                        if lists.get(d, {}).get("season") != L[d]["season"]:
+                            access[d] = err
+                    report["errors"].append("gratis plan: geen toegang tot het huidige seizoen, andere competities niet meer geprobeerd")
+                    save()
+                    break
                 continue
             access[dv] = "ok"
             for fx in resp or []:

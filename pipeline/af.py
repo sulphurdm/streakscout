@@ -2,7 +2,9 @@
 
 Runs in the daily task before update.py:
     python3 -I af.py --state R/state --today YYYY-MM-DD [--max-seconds 500]
-Needs API_FOOTBALL_KEY in the environment and network access to v3.football.api-sports.io.
+The key: preferably a network secret on the cloud environment (host v3.football.api-sports.io, header
+x-apisports-key without prefix): the proxy adds it to each request and the key never enters the session.
+Otherwise API_FOOTBALL_KEY in the environment (then v3.football.api-sports.io must be an allowed domain).
 Works on any plan: it reads the plan and the requests left today from /status (free call) and spends
 at most that. Free plan: 100 requests a day, 10 a minute. Everything is saved after each call, so a
 run that stops (time limit, daily limit) continues where it left off on the next run.
@@ -63,9 +65,10 @@ def season_guess(div, today):
 
 
 def curl_get(url, key, timeout=60):
-    """GET with the key sent as a header read from stdin, so it never appears in the command line or logs."""
-    p = subprocess.run(["curl", "-sS", "-L", "--max-time", str(timeout), "-D", "-", "-H", "@-", url],
-                       input=f"x-apisports-key: {key}\n".encode(), capture_output=True)
+    """GET; a key from the environment goes in a header read from stdin, so it never appears in the command line
+    or logs. Without one, the network secret on the environment adds the header on the way out."""
+    cmd = ["curl", "-sS", "-L", "--max-time", str(timeout), "-D", "-"] + (["-H", "@-"] if key else []) + [url]
+    p = subprocess.run(cmd, input=f"x-apisports-key: {key}\n".encode() if key else None, capture_output=True)
     if p.returncode != 0:
         return None, {}, p.stderr.decode(errors="replace")[:300]
     raw, headers, status = p.stdout, {}, None
@@ -108,7 +111,8 @@ class Client:
                 self.log.append(f"{path}: geen verbinding ({body})")
                 if attempt == 0:
                     continue
-                raise Stop("geen verbinding met v3.football.api-sports.io (staat het domein bij de netwerktoegang?)")
+                raise Stop("geen verbinding met v3.football.api-sports.io: er staat geen network secret voor die website op de omgeving"
+                           + (" en het domein staat niet bij de netwerktoegang" if self.key else "") + "")
             try:
                 js = json.loads(body)
             except ValueError:
@@ -126,7 +130,7 @@ class Client:
                     time.sleep(61)
                     continue
                 if "token" in low or "application key" in low or "not subscribed" in low or "suspended" in low:
-                    raise Stop(f"sleutel geweigerd: {txt}")
+                    raise Stop(f"sleutel geweigerd of ontbreekt: {txt}")
                 if "request limit" in low or ("requests" in err and "limit" in low):
                     raise Stop(f"daglimiet bereikt: {txt}")
                 return None, txt
@@ -228,12 +232,7 @@ def main(argv=None):
     rp = state / "af_report.json"
     S = load_json(state / "af_state.json", {})
     report = {"date": str(today), "status": "?", "calls": 0, "errors": [], "log": []}
-    key = os.environ.get("API_FOOTBALL_KEY", "").strip()
-    if not key:
-        report["status"] = "geen sleutel (API_FOOTBALL_KEY staat niet in de omgeving van de geplande taak)"
-        json.dump(report, open(rp, "w"), ensure_ascii=False, indent=1)
-        print(json.dumps({"status": report["status"], "more": False}, ensure_ascii=False))
-        return 0
+    key = os.environ.get("API_FOOTBALL_KEY", "").strip()  # empty: the environment's network secret adds it
 
     FX = load_json(state / "af_fixtures.json", {})
     names = load_json(state / "af_names.json", {})
@@ -490,6 +489,7 @@ def main(argv=None):
     withp = sum(x.get("with_players", 0) for x in per.values())
     report["coverage"] = f"{withp}/{fin} gespeelde matchen met spelersdata"
     hard = [e for e in report["errors"] if e.startswith(("sleutel", "daglimiet", "geen verbinding", "geen enkele", "status"))]
+    report["key_source"] = "omgevingsvariabele" if key else "network secret (of geen)"
     report["status"] = "fout" if hard else "ok"
     report["more"] = more
     json.dump(report, open(rp, "w"), ensure_ascii=False, indent=1)

@@ -10,7 +10,9 @@ Een geplande taak draait elke ochtend deze stappen in een verse sessie.
 4. `python3 -I pipeline/update.py --root R --today YYYY-MM-DD --plan` geeft de lijst bestanden die vandaag opgehaald moeten worden:
    12 Europese competities, de MLS-speeldagen die nu lopen (`USA_rN.txt`), de speeldagen van de Europese bekers die binnen [vandaag−1, vandaag+9] vallen, en de topschutters van de Jupiler Pro League.
 5. Elk bestand ophalen met WebFetch (URL-tabel en prompts staan in de geplande taak) en letterlijk wegschrijven naar `R/fetched/<bestand>`.
-5b. Spelersdata van API-Football: `API_FOOTBALL_KEY=… python3 -I pipeline/af.py --state R/state --today YYYY-MM-DD --max-seconds 540`.
+5b. Spelersdata van API-Football: `python3 -I pipeline/af.py --state R/state --today YYYY-MM-DD --max-seconds 540`.
+   De sleutel staat als network secret op de cloudomgeving (website `v3.football.api-sports.io`, header `x-apisports-key`, zonder prefix);
+   de proxy voegt hem toe, de sessie ziet hem nooit. Alternatief: omgevingsvariabele `API_FOOTBALL_KEY` + het domein toelaten.
    Draait opnieuw zolang de uitvoer `"more": true` zegt (het gratis plan mag 10 verzoeken per minuut). Zie "API-Football" hieronder.
 6. `python3 -I pipeline/update.py --root R --today YYYY-MM-DD`
    - controleert elke opgehaalde uitslag tegen wat al bekend is (dataset of vorige ophalingen);

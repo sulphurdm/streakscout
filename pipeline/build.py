@@ -20,7 +20,7 @@ page = (here / "app.html").read_text()
 page = page.replace("/*__DATA__*/null", js(json.load(open(out / "app_data.json"))))
 page = page.replace("/*__MODEL__*/null", js(model))
 page = page.replace("/*__HISTORY__*/null", js(hist))
-page = page.replace("/*__ENGINE__*/", (here / "engine.js").read_text() + "\n" + (here / "markets.js").read_text())
+page = page.replace("/*__ENGINE__*/", "\n".join((here / f).read_text() for f in ("engine.js", "markets.js", "players.js")))
 assert "/*__" not in page
 target.parent.mkdir(parents=True, exist_ok=True)
 target.write_text(page)

@@ -10,6 +10,8 @@ Een geplande taak draait elke ochtend deze stappen in een verse sessie.
 4. `python3 -I pipeline/update.py --root R --today YYYY-MM-DD --plan` geeft de lijst bestanden die vandaag opgehaald moeten worden:
    12 Europese competities, de MLS-speeldagen die nu lopen (`USA_rN.txt`), de speeldagen van de Europese bekers die binnen [vandaag−1, vandaag+9] vallen, en de topschutters van de Jupiler Pro League.
 5. Elk bestand ophalen met WebFetch (URL-tabel en prompts staan in de geplande taak) en letterlijk wegschrijven naar `R/fetched/<bestand>`.
+5b. Spelersdata van API-Football: `API_FOOTBALL_KEY=… python3 -I pipeline/af.py --state R/state --today YYYY-MM-DD --max-seconds 540`.
+   Draait opnieuw zolang de uitvoer `"more": true` zegt (het gratis plan mag 10 verzoeken per minuut). Zie "API-Football" hieronder.
 6. `python3 -I pipeline/update.py --root R --today YYYY-MM-DD`
    - controleert elke opgehaalde uitslag tegen wat al bekend is (dataset of vorige ophalingen);
    - een competitie met meerdere afwijkende scores of een onbekende ploegnaam blijft op de vorige stand;
@@ -23,6 +25,28 @@ Een geplande taak draait elke ochtend deze stappen in een verse sessie.
    - superbet van de dag (`state/superbet.json`): één bet per match van vandaag en morgen over alle competities; exacte zoektocht naar de combinatie met de grootste totale kans die ±20x haalt (per match wordt winst vs 1X/X2 enz. afgewogen op odd tegen risico);
    - bouwt `R/dist/streakscout.html` en controleert dat JS en Python dezelfde kansen geven.
 7. Publiceren naar dezelfde URL met de nieuwe pagina en alle `state/`-bestanden.
+
+API-Football (spelersbets)
+- `af.py` haalt op en bewaart meteen na elk verzoek (hervat waar het stopte). Budget = wat /status vandaag nog toelaat (gratis: 100/dag).
+  Volgorde: competities en seizoenen (1×/week), speelschema per competitie (alles op dag 1, daarna de 4 oudste per dag),
+  blessures/schorsingen voor de matchen van vandaag en morgen (`/injuries?ids=`, 20 per verzoek), dan spelersstatistieken van
+  gespeelde matchen (`/fixtures?ids=`, 20 matchen per verzoek): eerst de laatste matchen van ploegen die binnenkort spelen in de
+  belangrijkste competities (CL, Jupiler Pro League, Premier League, …), dan oudere.
+- Bestanden in `state/`: `af_state.json` (plan, competitie-id's, seizoenen, toegang), `af_fixtures.json`, `af_players.csv`
+  (per speler per match: minuten, basis, goals, assists, schoten, op doel, geel, rood, penalty's, rating), `af_names.json`,
+  `af_teamstats.csv` (schoten, corners, kaarten, balbezit, xG per ploeg per match; nog niet gebruikt), `af_injuries.json`,
+  `af_map.json` (API-ploeg-id → datasetnaam), `af_report.json`, `player_predictions.csv` (trackrecord spelers).
+- `players_af.py` koppelt API-ploegen aan onze namen via de matchen (zelfde competitie, datum ±1 dag, zelfde score, namen lijken),
+  en rekent per speler: cijfer per 90 minuten (goals, assists, op doel, schoten, geel; recente matchen zwaarder, halveringstijd
+  6 matchen; naar het positiegemiddelde getrokken), verwachte minuten en kans dat hij speelt (laatste 5 ploegmatchen).
+  Per ploeg: wat tegenstanders tegen hen scoren, schieten en aan kaarten krijgen.
+- `players.js` (pagina én `superbet_cli.js`): kans per match = cijfer × verwachte minuten × matchfactor
+  (goals/assists: verwachte goals van de ploeg volgens het model t.o.v. hun gemiddelde; schoten/kaarten: tegenstander en thuis/uit).
+  Kans geldt als de speler meespeelt (bookmakers schrappen spelersbets zonder deelname). Afwezigen (blessure/schorsing) vallen weg.
+- Verkeerde ploegkoppeling → `pipeline/af_aliases.json`: {"API-naam of id": "datasetnaam"}.
+- Gratis plan geeft mogelijk geen toegang tot het lopende seizoen: dan staat in `af_report.json` per competitie
+  "plan: Free plans do not have access to this season…" en is Pro nodig (7.500/dag; alles in één run).
+- Zonder API-Football-data toont de pagina de topschutters van voetbalkrant (Jupiler Pro League, Champions League, Europa League; enkel scoren).
 
 Onderhoud
 - Nieuwe ploeg (promotie, nieuw seizoen) → naam toevoegen aan `pipeline/aliases.json` (voetbalkrant-naam → datasetnaam).

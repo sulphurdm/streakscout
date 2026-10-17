@@ -4,6 +4,8 @@ Layout of --root:
   data/cfmd/data/Matches.csv, EloRatings.csv   (git clone of Club-Football-Match-Data)
   fetched/<DIV>.txt                             (raw lines "speeldag;dd/mm;hh:mm;home;away;score")
   state/recent.csv, state/fixtures.json         (previous state, may be missing)
+  fetched/PLAYERS_<B1|CL|EL>.txt                (topscorer tables, fallback for player bets)
+  state/af_*                                    (API-Football player data, written by af.py before this script)
 Outputs: state/recent.csv, state/fixtures.json, state/report.json, out/*, dist/streakscout.html
 
 Usage: python3 -I update.py --root ROOT --today YYYY-MM-DD
@@ -204,7 +206,7 @@ def main():
     lrounds = league_rounds_to_fetch(leagues, learned, today)
     if args.plan:
         files = [f"{dv}.txt" for dv, m in leagues.items() if "url" in m] + \
-                [f"{c}_r{n}.txt" for c, n in lrounds] + [f"{c}_r{n}.txt" for c, n in rounds] + ["PLAYERS_B1.txt"]
+                [f"{c}_r{n}.txt" for c, n in lrounds] + [f"{c}_r{n}.txt" for c, n in rounds] + ["PLAYERS_B1.txt", "PLAYERS_CL.txt", "PLAYERS_EL.txt"]
         print(json.dumps({"fetch": files}))
         return
 
@@ -438,38 +440,45 @@ def main():
             st["fixtures"] = len(keep)
             st["status"] = "niets op te halen" if not [r for r in rounds if r[0] == code] else "niet opgehaald"
 
-    # ---- player goals (Jupiler Pro League only: the only league where the source publishes them)
+    # ---- topscorers from voetbalkrant (goals + minutes): Jupiler Pro League, Champions League, Europa League.
+    # Only a fallback for the page when API-Football has no player data for a match.
     pp = state / "players.json"
     players = json.load(open(pp)) if pp.exists() else {}
-    f = root / "fetched" / "PLAYERS_B1.txt"
-    pst = {"name": "Spelers Jupiler Pro League", "status": "niet opgehaald", "warnings": []}
-    report["leagues"]["PLAYERS_B1"] = pst
-    if f.exists():
-        prow, bad, unknown = parse_players(f, aliases["B1"])
+    cup_names = {k: v["team"] for k, v in cup_alias.items()}
+    for code, al, is_cup in (("B1", aliases["B1"], False), ("CL", cup_names, True), ("EL", cup_names, True)):
+        f = root / "fetched" / f"PLAYERS_{code}.txt"
+        pst = {"name": f"Topschutters {leagues[code]['name'] if code in leagues else cups[code]['name']}", "status": "niet opgehaald", "warnings": []}
+        report["leagues"][f"PLAYERS_{code}"] = pst
+        if not f.exists():
+            continue
+        prow, bad, unknown = parse_players(f, al)
         errs = []
-        if unknown:
+        if unknown and not is_cup:
             errs.append("onbekende ploegen: " + ", ".join(sorted(unknown)))
-        if len(prow) < 20:
+        elif unknown:
+            pst["warnings"].append("ploegen zonder data overgeslagen: " + ", ".join(sorted(unknown))[:300])
+        if len(prow) < (20 if not is_cup else 5):
             errs.append(f"maar {len(prow)} spelers gelezen")
-        # sanity: a team's players cannot have scored more league goals than the team did this season
-        allres = pd.concat([df[df.Division == "B1"].rename(columns={"MatchDate": "date", "HomeTeam": "home", "AwayTeam": "away", "FTHome": "fh", "FTAway": "fa"})[["date", "home", "away", "fh", "fa"]],
-                            *[x[x["div"] == "B1"][["date", "home", "away", "fh", "fa"]] for x in new_recent if len(x)]])
-        allres = allres[allres.date >= date(season_year(today), 7, 1)]
-        tg = {}
-        for r in allres.itertuples():
-            tg[r.home] = tg.get(r.home, 0) + int(r.fh)
-            tg[r.away] = tg.get(r.away, 0) + int(r.fa)
-        per = {}
-        for t, *_rest in prow:
-            per[t] = per.get(t, 0) + _rest[1]
-        for t, g in per.items():
-            if g > tg.get(t, 0):
-                errs.append(f"{t}: spelers {g} goals, ploeg maar {tg.get(t, 0)}")
+        if not is_cup:
+            # sanity: a team's players cannot have scored more league goals than the team did this season
+            allres = pd.concat([df[df.Division == code].rename(columns={"MatchDate": "date", "HomeTeam": "home", "AwayTeam": "away", "FTHome": "fh", "FTAway": "fa"})[["date", "home", "away", "fh", "fa"]],
+                                *[x[x["div"] == code][["date", "home", "away", "fh", "fa"]] for x in new_recent if len(x)]])
+            allres = allres[allres.date >= date(season_year(today), 7, 1)]
+            tg = {}
+            for r in allres.itertuples():
+                tg[r.home] = tg.get(r.home, 0) + int(r.fh)
+                tg[r.away] = tg.get(r.away, 0) + int(r.fa)
+            per = {}
+            for t, *_rest in prow:
+                per[t] = per.get(t, 0) + _rest[1]
+            for t, g in per.items():
+                if g > tg.get(t, 0):
+                    errs.append(f"{t}: spelers {g} goals, ploeg maar {tg.get(t, 0)}")
         if errs:
             pst["status"] = "fout"
             pst["errors"] = errs[:10]
         else:
-            players["B1"] = {"updated": str(today), "rows": prow}
+            players[code] = {"updated": str(today), "rows": prow}
             pst["status"] = "ok"
             pst["players"] = len(prow)
         if bad:
@@ -547,6 +556,34 @@ def main():
 
     out = root / "out"
     out.mkdir(exist_ok=True)
+    # ---- player data from API-Football (fetched by af.py earlier in the run)
+    afp = out / "af_page.json"
+    if afp.exists():
+        afp.unlink()
+    afr = json.load(open(state / "af_report.json")) if (state / "af_report.json").exists() else None
+    report["api_football"] = {k: afr.get(k) for k in ("date", "status", "plan", "calls", "remaining", "coverage", "more", "errors", "status_detail")} if afr else {"status": "niet gedraaid"}
+    try:
+        import players_af
+        cur = date(season_year(today), 7, 1) - timedelta(days=200)  # MLS seasons start in February
+        res = [df[df.MatchDate >= cur].rename(columns={"Division": "div", "MatchDate": "date", "HomeTeam": "home", "AwayTeam": "away", "FTHome": "fh", "FTAway": "fa"})[["div", "date", "home", "away", "fh", "fa"]]]
+        if len(fd_all):
+            res.append(fd_all[fd_all.MatchDate >= cur].rename(columns={"Division": "div", "MatchDate": "date", "HomeTeam": "home", "AwayTeam": "away", "FTHome": "fh", "FTAway": "fa"})[["div", "date", "home", "away", "fh", "fa"]])
+        if len(rec):
+            res.append(rec[["div", "date", "home", "away", "fh", "fa"]])
+        season_res = pd.concat(res, ignore_index=True).dropna(subset=["fh", "fa"])
+        names_ = {}
+        for dv, al in aliases.items():
+            for k, v in al.items():
+                names_.setdefault(v, [v]).append(k)
+        for k, v in cup_alias.items():
+            names_.setdefault(v["team"], [v["team"]]).append(k)
+        ovr = json.load(open(HERE / "af_aliases.json")) if (HERE / "af_aliases.json").exists() else {}
+        page_af, rep_af = players_af.build(state, today, fixtures, season_res, names_, ovr)
+        if page_af:
+            json.dump(page_af, open(afp, "w"), separators=(",", ":"), ensure_ascii=False)
+        report["api_football"]["page"] = rep_af
+    except Exception as e:  # noqa: BLE001  never blocks the update
+        report["api_football"]["page"] = {"status": "fout", "error": f"{type(e).__name__}: {e}"}
     for fn in ("model.json", "history.json"):
         shutil.copy(HERE / fn, out / fn)
     d = root / "data/cfmd/data"
@@ -554,7 +591,7 @@ def main():
     run(sys.executable, "-I", str(HERE / "export.py"), str(d / "Matches.csv"), str(d / "EloRatings.csv"), str(out),
         "--recent", str(rp), "--fixtures", str(fxp), "--updated", str(today),
         "--players", str(pp), "--cups", str(HERE / "cups.json"), "--cup-aliases", str(HERE / "cup_aliases.json"),
-        "--fd", str(fdp), "--odds", str(op))
+        "--fd", str(fdp), "--odds", str(op), "--af", str(afp))
     run("node", str(HERE / "parity_test.js"), str(out))
     sbp = state / "superbet.json"
     failed = [k for k, v in report["leagues"].items() if v.get("status") == "fout"]

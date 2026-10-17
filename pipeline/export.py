@@ -17,6 +17,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("matches"); ap.add_argument("elo"); ap.add_argument("out")  # noqa: E702
 ap.add_argument("--recent"); ap.add_argument("--fixtures"); ap.add_argument("--updated")  # noqa: E702
 ap.add_argument("--players"); ap.add_argument("--cups"); ap.add_argument("--cup-aliases")  # noqa: E702
+ap.add_argument("--af", help="player data from API-Football (players_af.build)")
 ap.add_argument("--fd"); ap.add_argument("--odds")  # noqa: E702
 args = ap.parse_args()
 mpath, epath, out = args.matches, args.elo, Path(args.out)
@@ -155,6 +156,7 @@ for t, ename in foreign.items():
 data["foreign"] = sorted(foreign)
 data["eloDate"] = str(upd.MatchDate.max().date()) if n_upd else str(snap.date())
 data["players"] = json.load(open(args.players)) if args.players and Path(args.players).exists() else {}
+data["af"] = json.load(open(args.af)) if args.af and Path(args.af).exists() else None
 data["odds"] = json.load(open(args.odds)) if args.odds and Path(args.odds).exists() else {}
 
 json.dump(data, open(out / "app_data.json", "w"), separators=(",", ":"))

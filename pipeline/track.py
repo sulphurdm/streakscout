@@ -6,6 +6,7 @@ Used by update.py after the superbet step. Files in state/:
   track.json            summary of the last 30 days, read by the daily improvement check
 """
 import json
+import math
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -75,6 +76,45 @@ def summarise(P, today):
     return out
 
 
+PCOLS = ["made", "date", "div", "h", "a", "pid", "name", "team", "mk", "p", "pplay", "emin", "hit", "min"]
+
+
+def run_players(state, today, out_dir):
+    """Player predictions (API-Football) settled from the player stats of the match: hit 1/0, or 'void' when
+    the player did not play (bookmakers void those bets too)."""
+    import players_af
+    pp = state / "player_predictions.csv"
+    P = pd.read_csv(pp, dtype={"made": str, "date": str, "hit": str, "pid": str}) if pp.exists() else pd.DataFrame(columns=PCOLS)
+    newp = Path(out_dir) / "player_predictions.json"
+    if newp.exists():
+        N = pd.DataFrame(json.load(open(newp)))
+        if len(N):
+            N["hit"] = None
+            N["min"] = None
+            N["pid"] = N["pid"].astype(str)
+            P = pd.concat([P, N[PCOLS]], ignore_index=True).drop_duplicates(subset=["date", "h", "a", "pid", "mk"], keep="last")
+    recs = P.to_dict("records")
+    for r in recs:
+        if isinstance(r.get("hit"), float) and math.isnan(r["hit"]):
+            r["hit"] = None
+        if r.get("hit") in ("0", "1", "0.0", "1.0"):
+            r["hit"] = int(float(r["hit"]))
+    players_af.settle(state, [r for r in recs if r.get("hit") is None])
+    P = pd.DataFrame(recs, columns=PCOLS)
+    P = P[pd.to_datetime(P.date) >= pd.Timestamp(today - timedelta(days=KEEP_DAYS))]
+    P = P[~(P.hit.isna() & (pd.to_datetime(P.date) < pd.Timestamp(today - timedelta(days=7))))]
+    P.to_csv(pp, index=False)
+    W = P[pd.to_datetime(P.date) >= pd.Timestamp(today - timedelta(days=30))]
+    S = W[W.hit.isin([0, 1, "0", "1"])].copy()
+    S["hit"] = S.hit.astype(int)
+    out = {"settled": int(len(S)), "void": int((W.hit == "void").sum()), "open": int(W.hit.isna().sum())}
+    if len(S):
+        out["all"] = {"n": int(len(S)), "hit": round(float(S.hit.mean()), 3), "p": round(float(S.p.mean()), 3)}
+        out["by_market"] = {mk: {"n": int(len(g)), "hit": round(float(g.hit.mean()), 3), "p": round(float(g.p.mean()), 3)}
+                            for mk, g in S.groupby("mk")}
+    return out
+
+
 def run(root, today, out_dir):
     root, state = Path(root), Path(root) / "state"
     rec = pd.read_csv(state / "recent.csv") if (state / "recent.csv").exists() else pd.DataFrame()
@@ -124,6 +164,7 @@ def run(root, today, out_dir):
     json.dump(hist, open(hp, "w"), ensure_ascii=False, indent=1)
 
     summary = summarise(P, today)
+    summary["players"] = run_players(state, today, out_dir)
     done = [x for x in hist if x["settled"]]
     summary["superbet"] = {"days_settled": len(done), "won": sum(1 for x in done if x["won"]),
                            "legs_hit": sum(x["legs_hit"] for x in done), "legs": sum(len(x["legs"]) for x in done),

@@ -38,5 +38,34 @@ for (const f of data.fixtures) {
   }
 }
 fs.writeFileSync(path.join(out, "predictions.json"), JSON.stringify(preds));
+
+// player predictions for the track record (API-Football data): per match and market the 3 most likely
+// players plus every player at 50% or more; settled later from the player stats of that match
+const PLY = require("./players.js");
+const ppreds = [];
+if (data.af && data.af.t) {
+  for (const f of data.fixtures) {
+    const d = f.when.slice(0, 10);
+    if (d < today || d > tomorrow) continue;
+    const H = tix.get(f.h), A = tix.get(f.a);
+    if (!data.af.t[f.h] && !data.af.t[f.a]) continue;
+    let ps = null;
+    if (H != null && A != null) {
+      const bs = M.betsFor(eng, data, hist, H, A, f.div, today);
+      const g = (id) => { const b = bs.find((x) => x.id === id); return b ? b.p : NaN; };
+      ps = { H: g("sc1@H"), A: g("sc1@A") };
+    }
+    const list = PLY.playerBets(data, f.h, f.a, ps).list.filter((x) => x.pPlay >= 0.5);
+    for (const mk of PLY.MKTS) {
+      const L = list.filter((x) => x.mk === mk.id).sort((x, y) => y.p - x.p);
+      for (const [j, x] of L.entries()) {
+        if (j >= 3 && x.p < 0.5) continue;
+        ppreds.push({ made: today, date: d, div: f.div, h: f.h, a: f.a, pid: x.pid, name: x.name, team: x.team, mk: mk.id,
+          p: Math.round(x.p * 1000) / 1000, pplay: x.pPlay, emin: x.eMin });
+      }
+    }
+  }
+}
+fs.writeFileSync(path.join(out, "player_predictions.json"), JSON.stringify(ppreds));
 fs.writeFileSync(stateFile, JSON.stringify(sb, null, 1));
 console.log(JSON.stringify({ legs: sb.legs.length, odds: sb.odds, p: Math.round(sb.p * 10000) / 10000, candidates: sb.candidates }));

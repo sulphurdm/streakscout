@@ -167,6 +167,19 @@ button, input, select { font: inherit; color: inherit }
 .oddstbl span { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); padding: 3px 0 }
 .oddstbl span.top b { color: var(--hit) }
 .pl-team { font-size: 11px; font-weight: 600; letter-spacing: .03em; padding: 2px 7px; border-radius: 999px; background: var(--sunk); color: var(--muted); white-space: nowrap }
+.pl-tag { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap }
+.pl-tag.warn { background: var(--warn-soft); color: var(--warn) }
+.pl-why { white-space: normal }
+.pform { display: inline-flex; gap: 3px; margin-top: 3px }
+.pform i { width: 19px; height: 19px; border-radius: 4px; background: var(--miss); color: var(--ink); font: 600 11px/19px var(--f-mono); font-style: normal; text-align: center }
+.pform i.h { background: var(--hit); color: var(--surface) }
+.pform i.n { background: transparent; box-shadow: inset 0 0 0 1.5px var(--line) }
+.pl-inj { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-size: 13.5px; display: grid; gap: 4px }
+.pl-inj small { color: var(--muted) }
+.pl-inj[hidden] { display: none }
+.pl-mk { display: flex; flex-wrap: wrap; gap: 6px }
+.pl-mk button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 11px; font-size: 13px; cursor: pointer; color: var(--muted) }
+.pl-mk button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface) }
 
 /* form tab */
 .formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px }
@@ -293,9 +306,12 @@ footer a { color: inherit }
     <p class="note" id="sortNote"></p>
     <ul class="bets" id="bets"></ul>
     <div id="playersWrap" hidden style="display:grid; gap:10px">
-      <div class="subhead"><h3>Spelers · scoort in de match</h3><span class="pl-meta" id="playersMeta"></span></div>
-      <p class="note">Ruwe schatting, niet getest zoals de bets hierboven: goals per 90 minuten dit seizoen (naar het gemiddelde getrokken), de gemiddelde speeltijd en de verwachte goals van zijn ploeg in deze match. Er wordt aangenomen dat hij speelt; check de opstelling. Spelersdata is er enkel voor de Jupiler Pro League.</p>
+      <div class="subhead"><h3>Spelers</h3><span class="pl-meta" id="playersMeta"></span></div>
+      <div class="pl-mk" role="group" aria-label="Spelersmarkt" id="plMk"></div>
+      <p class="note" id="plNote"></p>
+      <div class="pl-inj" id="plInj" hidden></div>
       <ul class="bets" id="players"></ul>
+      <div><button class="linkbtn" id="plMore" hidden></button></div>
     </div>
   </section>
 
@@ -321,10 +337,11 @@ footer a { color: inherit }
           <button data-g="corners" aria-pressed="false">Corners</button>
           <button data-g="cards" aria-pressed="false">Kaarten</button>
           <button data-g="shots" aria-pressed="false">Schoten</button>
+          <button data-g="players" aria-pressed="false">Spelers</button>
         </div>
       </div>
       <div class="bestopts">
-        <label for="bestMin">Minstens <select class="select" id="bestMin"><option value="0.5">50%</option><option value="0.6">60%</option><option value="0.7" selected>70%</option><option value="0.8">80%</option></select> kans</label>
+        <label for="bestMin">Minstens <select class="select" id="bestMin"><option value="0.3">30%</option><option value="0.4">40%</option><option value="0.5">50%</option><option value="0.6">60%</option><option value="0.7" selected>70%</option><option value="0.8">80%</option></select> kans</label>
         <label><input type="checkbox" id="bestOne" checked> max. 1 bet per match</label>
         <label><input type="checkbox" id="bestSig"> enkel signaal sterk of matig</label>
       </div>
@@ -768,12 +785,12 @@ const HIST = /*__HISTORY__*/null;
 
   function setSort(s) { state.sort = s; store.set("sort", s); for (const [id, k] of [["s-lift", "lift"], ["s-p", "p"], ["s-val", "val"]]) $(id).setAttribute("aria-pressed", s === k); renderBets(); }
   $("s-lift").onclick = () => setSort("lift"); $("s-p").onclick = () => setSort("p"); $("s-val").onclick = () => setSort("val");
-  document.querySelectorAll(".filters button").forEach((btn) => btn.addEventListener("click", () => {
+  document.querySelectorAll(".filters:not(#bestFilters) button").forEach((btn) => btn.addEventListener("click", () => {
     state.group = btn.dataset.g; store.set("group", state.group);
-    document.querySelectorAll(".filters button").forEach((x) => x.setAttribute("aria-pressed", x === btn)); renderBets();
+    document.querySelectorAll(".filters:not(#bestFilters) button").forEach((x) => x.setAttribute("aria-pressed", x === btn)); renderBets();
   }));
 
-  // ---------- players (anytime scorer, Jupiler Pro League only) ----------
+  // ---------- players: API-Football data for every competition, voetbalkrant topscorers as fallback ----------
   const SEASON_START = (() => { const u = DATA.updated || DATA.dataEnd; const y = +u.slice(0, 4), mo = +u.slice(5, 7);
     return Math.round((Date.UTC(mo >= 7 ? y : y - 1, 6, 1) - Date.UTC(2000, 0, 1)) / 864e5); })();
   function teamSeason(t, divIdx) {
@@ -785,46 +802,128 @@ const HIST = /*__HISTORY__*/null;
     }
     return { n, gf };
   }
-  let PLAYERS = [];
-  function buildPlayers() {
-    const P = DATA.players && DATA.players.B1;
-    if (!P || !LAST_R) return [];
-    const b1 = DATA.divs.indexOf("B1"), out = [];
-    for (const [t, side] of [[state.H, "H"], [state.A, "A"]]) {
-      const rows = P.rows.filter((r) => tix.get(r[0]) === t);
-      const sc = LAST_R["sc1@" + side];
+  const PL = SSPlayers;
+  let PLAYERS = [], PL_INJ = null, PL_SRC = null;
+  const plState = { mk: store.get("plMk", "sc"), all: false, key: "" };
+  const scoreP = (r) => (r ? { H: r["sc1@H"] && r["sc1@H"].p, A: r["sc1@A"] && r["sc1@A"].p } : null);
+  /** topscorer tables (goals and minutes only): Jupiler Pro League, Champions League, Europa League */
+  function fallbackPlayers(div, H, A, r) {
+    const P = DATA.players && DATA.players[div];
+    if (!P || !r) return [];
+    const divIdx = DATA.divs.indexOf(div), cup = isCup(div), out = [];
+    for (const [t, side] of [[H, "H"], [A, "A"]]) {
+      const rows = P.rows.filter((x) => tix.get(x[0]) === t);
+      const sc = r["sc1@" + side];
       if (!rows.length || !sc || !Number.isFinite(sc.p)) continue;
-      const ts = teamSeason(t, b1);
-      if (ts.n < 2) continue;
-      const lamTeam = -Math.log(1 - Math.min(0.97, sc.p));
-      const avg = (ts.gf + 1.4 * 2) / (ts.n + 2);
-      const factor = Math.min(1.6, Math.max(0.6, lamTeam / avg));
+      let n, avg;
+      if (cup) { n = Math.max(1, Math.round(Math.max(...rows.map((x) => x[3])) / 90)); avg = 1.35; } else {
+        const ts = teamSeason(t, divIdx);
+        if (ts.n < 2) continue;
+        n = ts.n; avg = (ts.gf + 1.4 * 2) / (ts.n + 2);
+      }
+      const factor = Math.min(1.6, Math.max(0.6, -Math.log(1 - Math.min(0.97, sc.p)) / avg));
       for (const [, name, g, mins, pen] of rows) {
-        const g90 = (g + 0.3) / (mins / 90 + 3);
-        const expMin = Math.min(90, mins / ts.n);
-        const p = 1 - Math.exp(-g90 * (expMin / 90) * factor);
-        out.push({ id: "pl:" + name, name, team: t, g, mins, pen, p, expMin, label: `${name} scoort`, mkey: matchKey() });
+        const g90 = (g + 0.3) / (mins / 90 + 3), eMin = Math.min(90, mins / n);
+        out.push({ id: "pl:" + name, mk: "sc", fb: true, name, team: TEAMS[t], side, g, mins, penN: pen, eMin,
+          p: 1 - Math.exp(-g90 * (eMin / 90) * factor), label: `${name} scoort` });
       }
     }
     return out;
   }
+  /** player bets for one fixture: { list, inj, src } */
+  function playersFor(H, A, div, r) {
+    const h = TEAMS[H], a = TEAMS[A], mkey = `${h}|${a}`;
+    if (DATA.af && DATA.af.t && (DATA.af.t[h] || DATA.af.t[a])) {
+      const x = PL.playerBets(DATA, h, a, scoreP(r));
+      return { list: x.list.map((b) => Object.assign(b, { mkey })), inj: x.inj, src: { af: true, have: x.have } };
+    }
+    const fb = fallbackPlayers(div, H, A, r).map((b) => Object.assign(b, { mkey }));
+    return { list: fb, inj: null, src: fb.length ? { af: false } : null };
+  }
+  function buildPlayers() {
+    const x = playersFor(state.H, state.A, state.div, LAST_R);
+    PL_INJ = x.inj; PL_SRC = x.src;
+    if (plState.key !== matchKey()) { plState.all = false; plState.key = matchKey(); }
+    return x.list;
+  }
+  const REASON = { "injury": "blessure", "knee injury": "knieblessure", "muscle injury": "spierblessure", "hamstring injury": "hamstring",
+    "ankle injury": "enkelblessure", "calf injury": "kuitblessure", "thigh injury": "dijblessure", "groin injury": "liesblessure",
+    "back injury": "rugblessure", "foot injury": "voetblessure", "hip injury": "heupblessure", "shoulder injury": "schouderblessure",
+    "head injury": "hoofdblessure", "achilles tendon injury": "achillespees", "knock": "tik", "illness": "ziek", "virus": "ziek",
+    "suspended": "geschorst", "red card": "rode kaart", "yellow cards": "gele kaarten", "coach's decision": "keuze trainer",
+    "inactive": "niet actief", "lack of fitness": "niet fit", "broken leg": "gebroken been", "broken ankle": "gebroken enkel",
+    "broken arm": "gebroken arm", "concussion": "hersenschudding", "personal reasons": "persoonlijk", "international duty": "interland",
+    "rest": "rust", "surgery": "operatie", "muscle strain": "spierverrekking", "ligament injury": "ligamenten", "cruciate ligament injury": "kruisband",
+    "fitness": "conditie", "loan agreement": "uitleenclausule", "not in squad": "niet in de selectie" };
+  const nlReason = (r) => REASON[String(r || "").toLowerCase()] || r || "";
+  const plural = (n, one, more) => `${n} ${n === 1 ? one : more}`;
+  function formBoxes(x) {
+    if (!x.form) return "";
+    const idx = PL.FORM[x.mk], k = x.mk === "sh2" ? 2 : 1;
+    return `<span class="pform" aria-label="Laatste ${x.form.length} matchen van zijn ploeg, oudste links">${x.form.map((f) => {
+      if (!f) return `<i class="n" title="niet gespeeld"></i>`;
+      const v = idx.reduce((s, j) => s + f[j], 0);
+      return `<i class="${v >= k ? "h" : ""}" title="${f[0]} min · ${plural(f[1], "goal", "goals")} · ${plural(f[2], "assist", "assists")} · ${f[3]} op doel · ${plural(f[4], "schot", "schoten")}${f[5] ? " · geel" : ""}">${v || ""}</i>`;
+    }).join("")}</span>`;
+  }
+  function plWhy(x) {
+    if (x.fb) return `${plural(x.g, "goal", "goals")} in ${x.mins} min${x.penN ? ` (${x.penN} pen.)` : ""} · speelt gemiddeld ${Math.round(x.eMin)} min`;
+    const [apps, mins, g, a, sot, sh, y] = x.season;
+    const what = { sc: plural(g, "goal", "goals"), ga: `${plural(g, "goal", "goals")} en ${plural(a, "assist", "assists")}`, as: plural(a, "assist", "assists"),
+      sot: `${sot} op doel`, sh2: plural(sh, "schot", "schoten"), yc: `${y}× geel` }[x.mk];
+    return `${what} in ${mins} min (${plural(apps, "match", "matchen")}) · speelt ±${x.eMin} min, ${x.starts}/5 in de basis${x.pPlay < 0.75 ? ` · niet altijd erbij (${pct(x.pPlay)} van de laatste 5)` : ""}`;
+  }
+  const POSN = { D: "verdediger", M: "middenvelder", F: "aanvaller" };
+  function plTags(x) {
+    return `${x.pos && POSN[x.pos] ? `<span class="pl-team">${POSN[x.pos]}</span>` : ""}${x.pen ? `<span class="pl-tag">neemt penalty's</span>` : ""}${x.doubt ? `<span class="pl-tag warn">twijfel: ${esc(nlReason(x.doubt))}</span>` : ""}`;
+  }
+  function plValue(x) {
+    const v = valueOf(x);
+    if (!v) return ["", ""];
+    return [v.edge > 0.03 ? `+${Math.round(v.edge * 100)}% volgens schatting` : v.edge < -0.03 ? `${Math.round(v.edge * 100)}% volgens schatting` : "rond de eerlijke odd",
+      v.edge > 0.03 ? "pos" : v.edge < -0.03 ? "neg" : ""];
+  }
+  function injHTML() {
+    if (!PL_INJ) return "";
+    const part = (side, t) => {
+      const L = PL_INJ[side] || [], out = L.filter((x) => x[2] === "uit"), dbt = L.filter((x) => x[2] !== "uit");
+      const fmt = (z) => z.map((x) => `${esc(x[1])} <small>(${esc(nlReason(x[3]))})</small>`).join(", ");
+      return `<div><b>${esc(dn(t))}</b> · ${out.length ? `afwezig: ${fmt(out)}` : "niemand afwezig gemeld"}${dbt.length ? ` · twijfel: ${fmt(dbt)}` : ""}</div>`;
+    };
+    return `<div class="pl-meta">Blessures en schorsingen volgens API-Football (${fmtISO(PL_INJ.t || PL_INJ.d)}): afwezige spelers staan niet in de lijst.</div>${part("H", state.H)}${part("A", state.A)}`;
+  }
   function renderPlayers() {
     const wrap = $("playersWrap"), ul = $("players");
-    const show = PLAYERS.length && (state.group === "all" || state.group === "goals" || state.group === "players");
+    const show = PLAYERS.length > 0 && (state.group === "all" || state.group === "goals" || state.group === "players");
     wrap.hidden = !show;
     if (!show) return;
-    $("playersMeta").textContent = `topschutters t/m ${fmtISO(DATA.players.B1.updated)}`;
+    const af = !!(PL_SRC && PL_SRC.af);
+    const mks = af ? PL.MKTS : PL.MKTS.filter((x) => x.id === "sc");
+    if (!mks.some((x) => x.id === plState.mk)) plState.mk = "sc";
+    $("plMk").hidden = mks.length < 2;
+    $("plMk").innerHTML = mks.map((x) => `<button data-mk="${x.id}" aria-pressed="${x.id === plState.mk}">${esc(x.s)}</button>`).join("");
+    const missing = af ? [[state.H, "H"], [state.A, "A"]].filter(([, s]) => !PL_SRC.have[s]).map(([t]) => dn(t)) : [];
+    $("playersMeta").textContent = af ? `API-Football · tot ${fmtISO(DATA.af.upd)}` : `topschutters t/m ${fmtISO(DATA.players[state.div].updated)}`;
+    $("plNote").textContent = af
+      ? `Kans als hij meespeelt (bookmakers schrappen een spelersbet als de speler niet meedoet). Zijn cijfers per 90 minuten dit seizoen, de laatste matchen zwaarder, × verwachte speeltijd × deze match (verwachte goals van zijn ploeg, wat de tegenstander toelaat). De vakjes: laatste 5 matchen van zijn ploeg, oudste links. Nog niet getest zoals de ploegbets.${missing.length ? ` Voor ${missing.join(" en ")} is er nog geen spelersdata.` : ""}`
+      : "Ruwe schatting uit de topschutterslijst (enkel spelers die al scoorden): goals per 90 minuten, gemiddelde speeltijd en de verwachte goals van zijn ploeg. Er wordt aangenomen dat hij speelt; check de opstelling.";
+    const inj = injHTML();
+    $("plInj").hidden = !inj; $("plInj").innerHTML = inj;
     const by = state.sort === "val" ? (x) => { const v = valueOf(x); return v ? 10 + v.edge : x.p; } : (x) => x.p;
+    const full = state.group === "players" || plState.all;
+    // the short list skips players who are often not in the team (their chance only counts if they play)
+    const all = PLAYERS.filter((x) => x.mk === plState.mk).sort((a, b) => by(b) - by(a));
+    const list = full ? all : all.filter((x) => x.fb || x.pPlay >= 0.5);
+    const limit = full ? list.length : 8;
     const inSlip = new Set(state.slip.map((s) => s.k));
-    ul.innerHTML = PLAYERS.slice().sort((a, b) => by(b) - by(a)).map((x) => {
-      const v = valueOf(x), sk = oddsKey(x.id);
-      const valTxt = v ? (v.edge > 0.03 ? `+${Math.round(v.edge * 100)}% volgens schatting` : v.edge < -0.03 ? `${Math.round(v.edge * 100)}% volgens schatting` : "rond de eerlijke odd") : "";
-      const valCls = v ? (v.edge > 0.03 ? "pos" : v.edge < -0.03 ? "neg" : "") : "";
+    ul.innerHTML = list.slice(0, limit).map((x) => {
+      const sk = oddsKey(x.id), [valTxt, valCls] = plValue(x);
       return `<li class="bet" data-id="${esc(x.id)}">
         <div class="bet-row">
           <div class="bet-toggle" style="cursor:default">
-            <span class="bet-name">${esc(x.name)}<span class="pl-team">${esc(dn(x.team))}</span></span>
-            <span class="bet-why">${x.g} goal${x.g === 1 ? "" : "s"} in ${x.mins} min${x.pen ? ` (${x.pen} pen.)` : ""} · speelt gemiddeld ${Math.round(x.expMin)} min</span>
+            <span class="bet-name">${esc(x.name)}<span class="pl-team">${esc(DISPLAY[x.team] || x.team)}</span>${plTags(x)}</span>
+            <span class="bet-why pl-why">${plWhy(x)}</span>
+            ${formBoxes(x)}
           </div>
           <div class="prob"><span class="pct">${pct(x.p)}</span><span class="bar"><i style="width:${(x.p * 100).toFixed(1)}%"></i></span></div>
           <div class="fair"><span class="l">eerlijke odd</span><span class="v num">${odd(x.p)}</span></div>
@@ -834,14 +933,20 @@ const HIST = /*__HISTORY__*/null;
             <span class="val ${valCls}">${valTxt}</span>
           </div>
         </div></li>`;
-    }).join("");
+    }).join("") || `<li class="empty">Geen spelers voor deze markt.</li>`;
+    $("plMore").hidden = all.length <= limit;
+    $("plMore").textContent = `Toon alle ${all.length} spelers`;
   }
+  $("plMk").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-mk]"); if (!b) return;
+    plState.mk = b.dataset.mk; store.set("plMk", plState.mk); renderPlayers();
+  });
+  $("plMore").addEventListener("click", () => { plState.all = true; renderPlayers(); });
   $("players").addEventListener("input", (e) => {
     const inp = e.target.closest("input[data-pid]"); if (!inp) return;
     state.odds[inp.dataset.k] = inp.value.trim(); store.set("odds", state.odds);
-    const x = PLAYERS.find((y) => y.id === inp.dataset.pid), v = valueOf(x), el = inp.parentElement.querySelector(".val");
-    el.className = "val " + (v ? (v.edge > 0.03 ? "pos" : v.edge < -0.03 ? "neg" : "") : "");
-    el.textContent = v ? (v.edge > 0.03 ? `+${Math.round(v.edge * 100)}% volgens schatting` : v.edge < -0.03 ? `${Math.round(v.edge * 100)}% volgens schatting` : "rond de eerlijke odd") : "";
+    const x = PLAYERS.find((y) => y.id === inp.dataset.pid), [t, c] = plValue(x), el = inp.parentElement.querySelector(".val");
+    el.className = "val " + c; el.textContent = t;
   });
   $("players").addEventListener("click", (e) => {
     const add = e.target.closest(".add"); if (!add) return;
@@ -949,7 +1054,7 @@ const HIST = /*__HISTORY__*/null;
       <p><b>Europese bekers.</b> Voor Champions, Europa en Conference League gebruikt StreakScout de competitiematchen van beide ploegen: de reeksen komen uit hun eigen competitie, het gemiddelde is dat van beide competities en de Elo-sterkte vergelijkt de niveaus. Ploegen uit competities zonder recente data steunen enkel op hun Elo.</p>
       <p><b>MLS.</b> De uitslagen van 2026 komen per speeldag van voetbalkrant.com en zijn bij het toevoegen nagekeken tegen de officiële stand (alle 30 ploegen identiek); De reeksen steunen op dit seizoen. Voor de MLS is er geen Elo en geen corners, kaarten, schoten of ruststanden, dus enkel uitslag- en goalmarkten. Play-offs zitten er niet in.</p>
       <p><b>Schoten en dubbele kans.</b> Schoten en schoten op doel per ploeg (10+, 13+, 3+ en 5+ op doel, meer schoten dan de tegenstander) volgen hetzelfde model; van alle markten houden schotreeksen het best stand. Ze komen uit dezelfde bron als corners en lopen dus even ver achter. Dubbele kans (1X, X2, 12): waar enkel 1X2-odds bekend zijn, wordt de odd daaruit afgeleid.</p>
-      <p><b>Spelers.</b> De bron publiceert enkel voor de Jupiler Pro League doelpunten en speelminuten per speler. De kans dat een speler scoort is een eenvoudige schatting op basis daarvan en is niet getest zoals de andere markten.</p>
+      <p><b>Spelers.</b> Uit API-Football: per match minuten, goals, assists, schoten, schoten op doel en kaarten van elke speler, plus blessures en schorsingen. Per speler een cijfer per 90 minuten dit seizoen (de laatste matchen tellen zwaarder, en met weinig minuten wordt het naar het gemiddelde van zijn positie getrokken) × zijn verwachte speeltijd (laatste 5 matchen) × de match: de verwachte goals van zijn ploeg volgens het model voor goals en assists, en wat de tegenstander toelaat (thuis of uit) voor schoten en kaarten. De kans geldt als hij meespeelt, zoals bij de bookmaker, waar een spelersbet vervalt als de speler niet meedoet. Is er geen API-Football-data, dan valt de site terug op de topschutters van voetbalkrant (Jupiler Pro League, Champions League, Europa League; enkel scoren). Nog niet getest zoals de ploegmarkten: het trackrecord loopt sinds oktober 2026.</p>
       <p><b>Odds.</b> Voor 1X2 en over/under 2.5 toont de app bookmakerodds van football-data.co.uk (onder meer Bet365, Pinnacle en de gemiddelde en hoogste marktprijs) en van The Odds API (onder meer Unibet, Pinnacle en William Hill). Odds van Belgische bookmakers zoals Napoleon zijn niet vrij beschikbaar; de beste gevonden prijs krijg je daar dus niet altijd. De marktkans is de kans die de odds van Pinnacle (of het marktgemiddelde) impliceren na het wegnemen van de marge.</p>
       <p><b>Data.</b> Uitslagen, corners, kaarten en odds van football-data.co.uk via de open dataset Club-Football-Match-Data, Elo van ClubElo. Die dataset wordt maar een paar keer per jaar bijgewerkt. Daarom komen recente uitslagen en het speelschema elke ochtend van voetbalkrant.com. Elke update wordt eerst gecontroleerd tegen de matchen die al bekend zijn; klopt er iets niet, dan blijft die competitie op de vorige stand. Die recente uitslagen bevatten enkel goals, dus corners en kaarten lopen achter. Elo-sterkte van ClubElo tot 1 september, daarna na elke uitslag bijgewerkt met de Elo-formule (t/m ${fmtISO(DATA.eloDate)}).</p>`;
   }
@@ -971,14 +1076,18 @@ const HIST = /*__HISTORY__*/null;
     for (const f of DATA.fixtures.filter((x) => x.div === state.div && x.when.slice(0, 10) >= todayISO())) {
       const H = tix.get(f.h), A = tix.get(f.a);
       if (H == null || A == null) continue;
-      for (const b of computeBets(H, A, state.div).bets) out.push(Object.assign(b, { f, H, A }));
+      const res = computeBets(H, A, state.div);
+      for (const b of res.bets) out.push(Object.assign(b, { f, H, A }));
+      for (const x of playersFor(H, A, state.div, res.r).list) if (x.fb || x.pPlay >= 0.6) out.push(Object.assign(x, { f, H, A, g: "players", pl: true }));
     }
     best.cache = { [key]: out };
     return out;
   }
   function bestRanked() {
-    let list = bestCandidates().filter((b) => (best.group === "all" || b.g === best.group) && b.p >= best.min && (!best.sig || b.rel.lvl >= 2));
-    const by = best.sort === "lift" ? (b) => b.p - b.base : best.sort === "val" ? (b) => { const v = valueOf(b); return v ? v.edge : -9; } : (b) => b.p;
+    // player bets only under "Spelers": they are not tested like the team markets
+    let list = bestCandidates().filter((b) => (b.pl ? best.group === "players" : best.group === "all" || b.g === best.group)
+      && b.p >= best.min && (b.pl || !best.sig || b.rel.lvl >= 2));
+    const by = best.sort === "lift" ? (b) => (b.pl ? b.p : b.p - b.base) : best.sort === "val" ? (b) => { const v = valueOf(b); return v ? v.edge : -9; } : (b) => b.p;
     if (best.sort === "val") list = list.filter((b) => valueOf(b));
     list = list.slice().sort((x, y) => by(y) - by(x));
     if (best.one) { const seen = new Set(); list = list.filter((b) => !seen.has(b.mkey) && seen.add(b.mkey)); }
@@ -1014,13 +1123,24 @@ const HIST = /*__HISTORY__*/null;
     renderSuper();
     const name = isCup(state.div) ? DATA.cups[state.div].name : DATA.divNames[state.div];
     const nfx = new Set(bestCandidates().map((b) => b.mkey)).size;
-    $("bestSub").textContent = nfx
-      ? `De sterkste bets uit ${nfx} komende match${nfx === 1 ? "" : "en"} van de ${name}, om een combi mee te bouwen. Klik op een match om alle bets te zien.`
-      : `Geen komende matchen met analyse voor de ${name}.`;
+    $("bestSub").textContent = !nfx ? `Geen komende matchen met analyse voor de ${name}.`
+      : best.group === "players"
+      ? `De spelersbets met de meeste kans uit ${nfx} komende match${nfx === 1 ? "" : "en"} van de ${name}. Kans als de speler meespeelt; spelersbets zijn nog niet getest zoals de ploegbets. Voor 2+ schoten en schot op doel liggen de kansen hoger dan voor scoren: verlaag de minimumkans om doelpuntenmakers te zien.`
+      : `De sterkste bets uit ${nfx} komende match${nfx === 1 ? "" : "en"} van de ${name}, om een combi mee te bouwen. Klik op een match om alle bets te zien.`;
     for (const [id, k] of [["b-p", "p"], ["b-lift", "lift"], ["b-val", "val"]]) $(id).setAttribute("aria-pressed", best.sort === k);
     const list = bestRanked(), inSlip = new Set(state.slip.map((x) => x.k));
     $("bestList").innerHTML = list.length ? list.slice(0, 40).map((b, j) => {
-      const v = valueOf(b), [vt, vc] = valText(v, "volgens reeksen"), sk = `${b.mkey}|${b.id}`, mk = b.market;
+      const v = valueOf(b), [vt, vc] = valText(v, b.pl ? "volgens schatting" : "volgens reeksen"), sk = `${b.mkey}|${b.id}`, mk = b.market;
+      if (b.pl) return `<li class="bet"><div class="bet-row">
+        <div class="bet-toggle" style="cursor:default">
+          <span class="bet-name">${esc(b.label)}<span class="pl-team">${esc(DISPLAY[b.team] || b.team)}</span>${plTags(b)}</span>
+          <span class="bet-why pl-why"><button class="linkbtn" data-goto="${j}">${esc(whenTxt(b.f.when))} · ${esc(dn(b.H))} – ${esc(dn(b.A))}</button> · ${plWhy(b)}</span>
+          ${formBoxes(b)}
+        </div>
+        <div class="prob"><span class="pct">${pct(b.p)}</span><span class="bar"><i style="width:${(b.p * 100).toFixed(1)}%"></i></span></div>
+        <div class="fair"><span class="l">eerlijke odd</span><span class="v num">${odd(b.p)}</span></div>
+        <div class="oddbox"><span></span><button class="add" data-j="${j}" aria-pressed="${inSlip.has(sk)}">${inSlip.has(sk) ? "✓ combi" : "+ combi"}</button><span class="val ${vc}">${vt}</span></div>
+      </div></li>`;
       return `<li class="bet"><div class="bet-row">
         <div class="bet-toggle" style="cursor:default">
           <span class="bet-name">${esc(b.label)}<span class="sig s${b.rel.lvl}">signaal ${SIGSHORT[b.rel.lvl]}</span></span>
@@ -1074,8 +1194,15 @@ const HIST = /*__HISTORY__*/null;
     if (go) {
       const b = list[+go.dataset.goto];
       state.H = b.H; state.A = b.A; homeSel.value = b.H; awaySel.value = b.A;
+      if (b.pl) {
+        plState.mk = b.mk; plState.key = b.mkey; plState.all = true;
+        if (!["all", "goals", "players"].includes(state.group)) {
+          state.group = "players";
+          document.querySelectorAll(".filters:not(#bestFilters) button").forEach((x) => x.setAttribute("aria-pressed", x.dataset.g === "players"));
+        }
+      }
       renderQuick(); renderAll(); setTab("bets");
-      const row = document.querySelector(`#bets .bet[data-id="${b.id}"]`); if (row) row.scrollIntoView({ block: "center" });
+      const row = document.querySelector(`#${b.pl ? "players" : "bets"} .bet[data-id="${b.id}"]`); if (row) row.scrollIntoView({ block: "center" });
       return;
     }
     const add = e.target.closest(".add");
@@ -1116,7 +1243,7 @@ const HIST = /*__HISTORY__*/null;
 
   // init
   for (const [id, k] of [["s-lift", "lift"], ["s-p", "p"], ["s-val", "val"]]) $(id).setAttribute("aria-pressed", state.sort === k);
-  document.querySelectorAll(".filters button").forEach((x) => x.setAttribute("aria-pressed", x.dataset.g === state.group));
+  document.querySelectorAll(".filters:not(#bestFilters) button").forEach((x) => x.setAttribute("aria-pressed", x.dataset.g === state.group));
   renderHistStatic();
   setLeague("B1");
   renderSlip();

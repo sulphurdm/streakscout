@@ -10,7 +10,11 @@ const { create } = require("./engine.js");
 const M = require("./markets.js");
 const eng = create(data, model);
 const tomorrow = new Date(Date.parse(today + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
-const sb = M.superbet(eng, data, hist, { from: today, to: tomorrow, target: 20, maxLegs: 14, minP: 0.62 });
+// competitions whose update failed today stay out of the superbet (their schedule and form were not checked)
+let failed = [];
+try { failed = JSON.parse(fs.readFileSync(path.join(out, "failed_leagues.json"))); } catch (e) { failed = []; }
+const sb = M.superbet(eng, data, hist, { from: today, to: tomorrow, target: 20, maxLegs: 14, minP: 0.62, skipDivs: failed });
+sb.skipped = failed;
 sb.made = today;
 data.superbet = sb;
 fs.writeFileSync(path.join(out, "app_data.json"), JSON.stringify(data));

@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sources as S  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
+LINE_NOROUND = re.compile(r"^\s*(\d{1,2})/(\d{1,2})\s*[; ]\s*([0-9]{1,2}:[0-9]{2})?\s*;(.+?);(.+?);\s*(\d{1,2})?\s*-?\s*(\d{1,2})?\s*$")
 LINE = re.compile(r"^\s*(?:speeldag\s*)?(\d+)\s*;\s*(\d{1,2})/(\d{1,2})\s*;\s*([0-9]{1,2}:[0-9]{2})?\s*;(.+?);(.+?);\s*(\d{1,2})?\s*-?\s*(\d{1,2})?\s*$")
 FIXTURE_DAYS = 9
 INVISIBLE = dict.fromkeys(map(ord, "\u00ad\u200b\u200c\u200d\u2060\ufeff"), None)
@@ -35,8 +36,21 @@ def clean(name):
     return " ".join(unicodedata.normalize("NFC", name).translate(INVISIBLE).split())
 
 
+def fold(name):
+    """Name without accents, case or punctuation differences ("Fenerbahçe" = "Fenerbahce")."""
+    s = unicodedata.normalize("NFKD", clean(name)).encode("ascii", "ignore").decode().lower()
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", s).split())
+
+
 def norm_aliases(a):
-    return {clean(k): v for k, v in a.items()}
+    out = {clean(k): v for k, v in a.items()}
+    for k, v in a.items():
+        out.setdefault(fold(k), v)
+    return out
+
+
+def alias(aliases, n):
+    return aliases.get(n) or aliases.get(fold(n))
 
 
 def season_year(today):
@@ -49,15 +63,21 @@ def parse(path, aliases, today):
     for raw in Path(path).read_text(encoding="utf-8").splitlines():
         if not raw.strip() or raw.startswith("COUNT") or raw.lower().startswith("speeldag;"):
             continue
-        m = LINE.match(re.sub(r"^\s*speeldag\s*", "", raw, flags=re.I))
-        if not m:
-            if ";" in raw:
-                bad.append(raw)
-            continue
-        rnd, dd, mm, hhmm, h, a, fh, fa = m.groups()
+        line = re.sub(r"^\s*speeldag\s*", "", raw, flags=re.I)
+        m = LINE.match(line)
+        if m:
+            rnd, dd, mm, hhmm, h, a, fh, fa = m.groups()
+        else:
+            m = LINE_NOROUND.match(line)  # some pages come back without the round number
+            if not m:
+                if ";" in raw:
+                    bad.append(raw)
+                continue
+            rnd = "0"
+            dd, mm, hhmm, h, a, fh, fa = m.groups()
         h, a = clean(h), clean(a)
         for n in (h, a):
-            if n not in aliases:
+            if alias(aliases, n) is None:
                 unknown.add(n)
         mm, dd = int(mm), int(dd)
         y = start if mm >= 7 else start + 1
@@ -67,7 +87,7 @@ def parse(path, aliases, today):
             bad.append(raw)
             continue
         played = fh is not None and fa is not None
-        rows.append({"round": int(rnd), "date": d, "time": hhmm or "", "h": aliases.get(h, h), "a": aliases.get(a, a),
+        rows.append({"round": int(rnd), "date": d, "time": hhmm or "", "h": alias(aliases, h) or h, "a": alias(aliases, a) or a,
                      "fh": int(fh) if played else None, "fa": int(fa) if played else None})
     return rows, unknown, bad
 
@@ -154,10 +174,10 @@ def parse_players(path, aliases):
         if not (g.isdigit() and mins.isdigit() and (pen.isdigit() or pen == "")):
             bad.append(raw)
             continue
-        if team not in aliases:
+        if alias(aliases, team) is None:
             unknown.add(team)
             continue
-        rows.append([aliases[team], name, int(g), int(mins), int(pen or 0)])
+        rows.append([alias(aliases, team), name, int(g), int(mins), int(pen or 0)])
     return rows, bad, unknown
 
 
@@ -269,6 +289,7 @@ def main():
                 for r in r_:
                     counts[r["round"]] = counts.get(r["round"], 0) + 1
                 full = max(counts.values()) if counts else 0
+                counts.pop(0, None)  # lines without a round number
                 for n in counts:  # learn round dates from the season page too
                     ds = [r["date"] for r in r_ if r["round"] == n]
                     if counts[n] >= full / 2:  # a round with only a postponed match keeps no start date
@@ -284,7 +305,7 @@ def main():
                 if not f.exists():
                     continue
                 r_, u_, b_ = parse(f, aliases.get(dv, {}), today)
-                r_ = [r for r in r_ if r["round"] == n]
+                r_ = [dict(r, round=n) for r in r_ if r["round"] in (n, 0)]
                 groups.append(r_); unknown |= u_; bad += b_; got.append(f"speeldag {n}")
                 if r_:
                     first = min(r["date"] for r in r_)
@@ -532,6 +553,8 @@ def main():
         "--fd", str(fdp), "--odds", str(op))
     run("node", str(HERE / "parity_test.js"), str(out))
     sbp = state / "superbet.json"
+    failed = [k for k, v in report["leagues"].items() if v.get("status") == "fout"]
+    json.dump(failed, open(out / "failed_leagues.json", "w"))
     run("node", str(HERE / "superbet_cli.js"), str(out), str(today), str(sbp))
     sb = json.load(open(sbp))
     report["superbet"] = {"legs": len(sb["legs"]), "odds": sb["odds"], "p": round(sb["p"], 4),

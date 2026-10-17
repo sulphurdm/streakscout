@@ -1,51 +1,87 @@
 {
  "B1": {
   "name": "Jupiler Pro League",
-  "url": "https://www.voetbalkrant.com/belgie/jupiler-pro-league/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/belgie/jupiler-pro-league/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/belgie/jupiler-pro-league/kalender/speeldag-{n}",
+  "rounds": 30,
+  "dates": {}
  },
  "E0": {
   "name": "Premier League",
-  "url": "https://www.voetbalkrant.com/engeland/premier-league/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/engeland/premier-league/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/engeland/premier-league/kalender/speeldag-{n}",
+  "rounds": 38,
+  "dates": {}
  },
  "E1": {
   "name": "Championship",
-  "url": "https://www.voetbalkrant.com/engeland/the-championship/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/engeland/the-championship/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/engeland/the-championship/kalender/speeldag-{n}",
+  "rounds": 46,
+  "dates": {}
  },
  "SP1": {
   "name": "La Liga",
-  "url": "https://www.voetbalkrant.com/spanje/la-liga/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/spanje/la-liga/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/spanje/la-liga/kalender/speeldag-{n}",
+  "rounds": 38,
+  "dates": {}
  },
  "D1": {
   "name": "Bundesliga",
-  "url": "https://www.voetbalkrant.com/duitsland/bundesliga/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/duitsland/bundesliga/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/duitsland/bundesliga/kalender/speeldag-{n}",
+  "rounds": 34,
+  "dates": {}
  },
  "I1": {
   "name": "Serie A",
-  "url": "https://www.voetbalkrant.com/italie/serie-a/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/italie/serie-a/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/italie/serie-a/kalender/speeldag-{n}",
+  "rounds": 38,
+  "dates": {}
  },
  "F1": {
   "name": "Ligue 1",
-  "url": "https://www.voetbalkrant.com/frankrijk/ligue-1/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/frankrijk/ligue-1/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/frankrijk/ligue-1/kalender/speeldag-{n}",
+  "rounds": 34,
+  "dates": {}
  },
  "N1": {
   "name": "Eredivisie",
-  "url": "https://www.voetbalkrant.com/nederland/nederlandse-eredivisie/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/nederland/nederlandse-eredivisie/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/nederland/nederlandse-eredivisie/kalender/speeldag-{n}",
+  "rounds": 34,
+  "dates": {}
  },
  "P1": {
   "name": "Liga Portugal",
-  "url": "https://www.voetbalkrant.com/portugal/primeira-liga/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/portugal/primeira-liga/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/portugal/primeira-liga/kalender/speeldag-{n}",
+  "rounds": 34,
+  "dates": {}
  },
  "SC0": {
   "name": "Scottish Premiership",
-  "url": "https://www.voetbalkrant.com/schotland/scottish-premier-league/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/schotland/scottish-premier-league/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/schotland/scottish-premier-league/kalender/speeldag-{n}",
+  "rounds": 38,
+  "dates": {}
  },
  "T1": {
   "name": "Süper Lig",
-  "url": "https://www.voetbalkrant.com/turkije/super-lig/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/turkije/super-lig/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/turkije/super-lig/kalender/speeldag-{n}",
+  "rounds": 34,
+  "dates": {}
  },
  "G1": {
   "name": "Super League Griekenland",
-  "url": "https://www.voetbalkrant.com/griekenland/super-league/geschiedenis/2026-2027/wedstrijden"
+  "url": "https://www.voetbalkrant.com/griekenland/super-league/geschiedenis/2026-2027/wedstrijden",
+  "rounds_url": "https://www.voetbalkrant.com/griekenland/super-league/kalender/speeldag-{n}",
+  "rounds": 26,
+  "dates": {}
  },
  "USA": {
   "name": "MLS",

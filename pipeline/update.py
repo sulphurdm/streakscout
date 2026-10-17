@@ -72,6 +72,22 @@ def parse(path, aliases, today):
     return rows, unknown, bad
 
 
+def merge_rows(groups):
+    """Combine rows of several pages for one league: a row with a score wins over one without;
+    a match with two different scores is left out (and reported)."""
+    out, bad = {}, set()
+    for rows in groups:
+        for r in rows:
+            k = (r["h"], r["a"], r["date"])
+            o = out.get(k)
+            if o is None or (o["fh"] is None and r["fh"] is not None):
+                out[k] = r
+            elif o["fh"] is not None and r["fh"] is not None and (o["fh"], o["fa"]) != (r["fh"], r["fa"]):
+                bad.add(k)
+    msgs = [f"bronnen geven een andere score voor {h}-{a} op {d}: match overgeslagen" for h, a, d in sorted(bad)]
+    return [r for k, r in out.items() if k not in bad], msgs
+
+
 def find(known, h, a, d):
     """Known result for the same pairing within 3 days."""
     hit = known.get((h, a))
@@ -81,7 +97,7 @@ def find(known, h, a, d):
     return best if abs((best[0] - d).days) <= 3 else None
 
 
-def cup_rounds_to_fetch(cups, learned, today, back=1):
+def cup_rounds_to_fetch(cups, learned, today, back=1, probe_ahead=FIXTURE_DAYS):
     """Round pages worth fetching today: rounds starting within [today-back, today+9],
     plus a round with an unknown date in the week after the previous round (to learn its date)."""
     out = []
@@ -96,8 +112,11 @@ def cup_rounds_to_fetch(cups, learned, today, back=1):
                 if today - timedelta(days=back) <= d <= today + timedelta(days=FIXTURE_DAYS):
                     out.append((code, n))
             else:
+                # probe the next round once the latest known round has started (to learn its date);
+                # rounds before the latest known one were played long ago
                 prev = dates.get(n - 1)
-                if prev is not None and today - timedelta(days=1) <= prev + timedelta(days=7) and prev <= today + timedelta(days=FIXTURE_DAYS):
+                if (prev is not None and n - 1 == max(dates) and today - timedelta(days=1) <= prev + timedelta(days=7)
+                        and prev <= today + timedelta(days=probe_ahead)):
                     out.append((code, n))
     return out
 
@@ -106,7 +125,7 @@ def league_rounds_to_fetch(leagues, learned, today):
     """Round-based leagues (MLS): recent and upcoming rounds; results of a round can come in up to 4 days
     after its first match. Between seasons, probe round 1 on Mondays to pick up the new season."""
     rl = {dv: m for dv, m in leagues.items() if "rounds_url" in m}
-    out = cup_rounds_to_fetch(rl, learned, today, back=4)
+    out = cup_rounds_to_fetch(rl, learned, today, back=4, probe_ahead=2)
     # rounds with a postponed match: also fetch while their last match is near
     for dv in rl:
         for k, v in learned.get(dv + "@last", {}).items():
@@ -163,7 +182,7 @@ def main():
     rounds = cup_rounds_to_fetch(cups, learned, today)
     lrounds = league_rounds_to_fetch(leagues, learned, today)
     if args.plan:
-        files = [f"{dv}.txt" for dv, m in leagues.items() if "rounds_url" not in m] + \
+        files = [f"{dv}.txt" for dv, m in leagues.items() if "url" in m] + \
                 [f"{c}_r{n}.txt" for c, n in lrounds] + [f"{c}_r{n}.txt" for c, n in rounds] + ["PLAYERS_B1.txt"]
         print(json.dumps({"fetch": files}))
         return
@@ -238,22 +257,35 @@ def main():
         st = {"name": meta["name"], "status": "ok", "added": 0, "overlap": 0, "fixtures": 0, "warnings": []}
         report["leagues"][dv] = st
         keep_old_fx = [x for x in old_fx if x["div"] == dv and x["when"][:10] >= str(today)]
+        # sources: the season page (results of the last weeks + schedule) and/or one page per round
+        # (round pages show results right after a match; the season page can lag a day or more)
+        groups, unknown, bad, got = [], set(), [], []
+        if "url" in meta:
+            f = root / "fetched" / f"{dv}.txt"
+            if f.exists():
+                r_, u_, b_ = parse(f, aliases.get(dv, {}), today)
+                groups.append(r_); unknown |= u_; bad += b_; got.append("seizoen")
+                counts = {}
+                for r in r_:
+                    counts[r["round"]] = counts.get(r["round"], 0) + 1
+                full = max(counts.values()) if counts else 0
+                for n in counts:  # learn round dates from the season page too
+                    ds = [r["date"] for r in r_ if r["round"] == n]
+                    if counts[n] >= full / 2:  # a round with only a postponed match keeps no start date
+                        learned.setdefault(dv, {}).setdefault(str(n), str(min(ds)))
+                    lst = learned.setdefault(dv + "@last", {})
+                    if str(n) not in lst or str(max(ds)) > lst[str(n)]:
+                        lst[str(n)] = str(max(ds))
         if "rounds_url" in meta:
-            # one page per round: combine the rounds fetched today, learn their dates
             mine = sorted(n for c, n in lrounds if c == dv)
-            files = [(n, root / "fetched" / f"{dv}_r{n}.txt") for n in mine]
-            files = [(n, f) for n, f in files if f.exists()]
-            if not files:
-                st["status"] = "niets op te halen" if not mine else "niet opgehaald"
-                fixtures += keep_old_fx
-                continue
-            rows, unknown, bad = [], set(), []
-            for n, f in files:
+            st["rounds"] = mine
+            for n in mine:
+                f = root / "fetched" / f"{dv}_r{n}.txt"
+                if not f.exists():
+                    continue
                 r_, u_, b_ = parse(f, aliases.get(dv, {}), today)
                 r_ = [r for r in r_ if r["round"] == n]
-                rows += r_
-                unknown |= u_
-                bad += b_
+                groups.append(r_); unknown |= u_; bad += b_; got.append(f"speeldag {n}")
                 if r_:
                     first = min(r["date"] for r in r_)
                     old1 = learned.get(dv, {}).get("1")
@@ -262,14 +294,15 @@ def main():
                         st["warnings"].append("nieuw seizoen gedetecteerd")
                     learned.setdefault(dv, {})[str(n)] = str(first)
                     learned.setdefault(dv + "@last", {})[str(n)] = str(max(r["date"] for r in r_))
-            st["rounds"] = mine
-        else:
-            f = root / "fetched" / f"{dv}.txt"
-            if not f.exists():
-                st["status"] = "niet opgehaald"
-                fixtures += keep_old_fx
-                continue
-            rows, unknown, bad = parse(f, aliases.get(dv, {}), today)
+        if not got:
+            st["status"] = "niet opgehaald" if ("url" in meta or st.get("rounds")) else "niets op te halen"
+            fixtures += keep_old_fx
+            st["fixtures"] = len(keep_old_fx)
+            continue
+        st["sources"] = got
+        rows, src_conflicts = merge_rows(groups)
+        for c in src_conflicts:
+            st["warnings"].append(c)
         errs = []
         if unknown:
             errs.append("onbekende ploegnamen: " + ", ".join(sorted(unknown)))
@@ -342,9 +375,15 @@ def main():
             st["warnings"].append(f"score gecorrigeerd: {r['h']}-{r['a']} {k[1]}-{k[2]} -> {r['fh']}-{r['fa']}")
         st["added"] = len(new)
         fx = [r for r in rows if r["fh"] is None and today <= r["date"] <= today + timedelta(days=FIXTURE_DAYS)]
-        fixtures += [{"div": dv, "round": f"Speeldag {r['round']}", "when": f"{r['date']} {r['time']}".strip(),
-                      "h": r["h"], "a": r["a"]} for r in sorted(fx, key=lambda r: (r["date"], r["time"]))]
-        st["fixtures"] = len(fx)
+        new_fx = [{"div": dv, "round": f"Speeldag {r['round']}", "when": f"{r['date']} {r['time']}".strip(),
+                   "h": r["h"], "a": r["a"]} for r in sorted(fx, key=lambda r: (r["date"], r["time"]))]
+        # rounds no page covered today (a fetch that failed): keep yesterday's schedule for them
+        covered = {f"Speeldag {r['round']}" for r in rows}
+        played = {(r["h"], r["a"]) for r in rows if r["fh"] is not None}
+        have = {(x["h"], x["a"]) for x in new_fx}
+        new_fx += [x for x in keep_old_fx if x["round"] not in covered and (x["h"], x["a"]) not in have | played]
+        fixtures += new_fx
+        st["fixtures"] = len(new_fx)
 
     # ---- European cups: fixtures only (results are not used as features)
     cup_fx_files = {(c, n) for c, n in rounds}

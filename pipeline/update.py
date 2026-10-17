@@ -28,6 +28,7 @@ HERE = Path(__file__).resolve().parent
 LINE_NOROUND = re.compile(r"^\s*(\d{1,2})/(\d{1,2})\s*[; ]\s*([0-9]{1,2}:[0-9]{2})?\s*;(.+?);(.+?);\s*(\d{1,2})?\s*-?\s*(\d{1,2})?\s*$")
 LINE = re.compile(r"^\s*(?:speeldag\s*)?(\d+)\s*;\s*(\d{1,2})/(\d{1,2})\s*;\s*([0-9]{1,2}:[0-9]{2})?\s*;(.+?);(.+?);\s*(\d{1,2})?\s*-?\s*(\d{1,2})?\s*$")
 FIXTURE_DAYS = 9
+ODDS_EVERY_DAYS = 2  # The Odds API: refresh a competition at most every other day
 INVISIBLE = dict.fromkeys(map(ord, "\u00ad\u200b\u200c\u200d\u2060\ufeff"), None)
 
 
@@ -519,13 +520,16 @@ def main():
             soon = sorted({f["div"] for f in fixtures if str(today) <= f["when"][:10] <= str(today + timedelta(days=2))})
             remaining = ometa.get("remaining")
             for comp in soon:
-                if comp not in S.ODDS_SPORTS or ometa.get("fetched", {}).get(comp) == str(today):
+                # one request returns every upcoming match of the competition (7 days ahead), so a refresh
+                # every other day keeps all matches covered at about 300 credits a month (free plan: 500)
+                last = ometa.get("fetched", {}).get(comp)
+                if comp not in S.ODDS_SPORTS or (last and (today - date.fromisoformat(last)).days < ODDS_EVERY_DAYS):
                     continue
                 if remaining is not None and int(float(remaining)) < 30:
                     report["odds"]["the-odds-api"] = {"status": "gestopt", "reason": f"nog {remaining} credits over"}
                     break
                 start = S.now_utc()
-                events, hdr, err = S.odds_api_fetch(comp, args.odds_key, start, start + timedelta(days=4))
+                events, hdr, err = S.odds_api_fetch(comp, args.odds_key, start, start + timedelta(days=7))
                 remaining = hdr.get("x-requests-remaining", remaining)
                 st = report["odds"].setdefault("the-odds-api", {}).setdefault(comp, {})
                 if err:

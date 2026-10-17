@@ -24,7 +24,7 @@ Een geplande taak draait elke ochtend deze stappen in een verse sessie.
    - MLS: per speeldag opgehaald (voetbalkrant heeft geen seizoenspagina die volledig doorkomt); speeldagen die in [vandaag−4, vandaag+9] beginnen,
      speeldagen met een uitgestelde match die nu valt, en de volgende speeldag zolang de datum nog niet gekend is. Eerste en laatste datum per speeldag staan in `state/cup_dates.json` (`USA`, `USA@last`);
    - Elo: na 1 september bijgewerkt met de Elo-formule op elke nieuwe uitslag (geen Elo voor de MLS);
-   - superbet van de dag (`state/superbet.json`): één bet per match van vandaag en morgen over alle competities; exacte zoektocht naar de combinatie met de grootste totale kans die ±20x haalt (per match wordt winst vs 1X/X2 enz. afgewogen op odd tegen risico);
+   - Superbet of the week (`state/superbet_week.json`): bij de eerste update van de week (maandag) één keer gemaakt uit alle matches van die dag t/m zondag (één bet per match, alle competities; exacte zoektocht naar de combinatie met de grootste totale kans die ±20x haalt, per match wordt winst vs 1X/X2 afgewogen op odd tegen risico) en daarna nooit meer veranderd. `weekly.py` zet bij elke update een ✓/✗ (of "vervallen" zonder uitslag na 3 dagen) bij de gespeelde matches; bekeruitslagen komen uit `state/cup_results.csv`. Is hij verloren en zijn er deze week nog genoeg matches, dan komt er één keer een "Second chance" van ±10x uit matches die nog moeten beginnen. Afgelopen weken: `state/superbet_weeks.json`. `state/superbet.json` bevat de bet die nog loopt;
    - bouwt `R/dist/streakscout.html` en controleert dat JS en Python dezelfde kansen geven.
 7. Publiceren naar dezelfde URL met de nieuwe pagina en alle `state/`-bestanden.
 

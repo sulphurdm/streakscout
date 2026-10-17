@@ -147,7 +147,7 @@
     const skip = new Set(o.skipDivs || []);
     for (const f of DATA.fixtures) {
       const d = f.when.slice(0, 10);
-      if (d < o.from || d > o.to || skip.has(f.div)) continue;
+      if (d < o.from || d > o.to || skip.has(f.div) || (o.after && f.when <= o.after) || (o.exclude && o.exclude.has(f.h + "|" + f.a))) continue;
       const H = tix.get(f.h), A = tix.get(f.a);
       if (H == null || A == null) continue;
       const all = betsFor(eng, DATA, HIST, H, A, f.div, o.from);
@@ -213,7 +213,7 @@
     });
     const prod = legs.reduce((a, l) => a * l.odd, 1), p = picked.reduce((a, x) => a * x.op.p, 1);
     return { from: o.from, to: o.to, target, candidates: matches.length, odds: Math.round(prod * 100) / 100, p,
-      allPriced: legs.length > 0 && legs.every((l) => l.bk), legs };
+      allPriced: legs.length > 0 && legs.every((l) => l.bk), reached: bestN > 0, legs };
   }
 
   const api = { DISPLAY, MK, ODDS_IDX, reliability, fixtureOdds, marketFor, analyseFixture, betsFor, superbet };

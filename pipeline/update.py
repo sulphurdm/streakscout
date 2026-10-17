@@ -18,7 +18,7 @@ import os
 import unicodedata
 import subprocess
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -60,6 +60,10 @@ def season_year(today):
     return today.year if today.month >= 7 else today.year - 1
 
 
+NOW = None  # local time of this run (datetime); a score of a match that may still be going on is ignored
+LIVE_MARGIN = timedelta(minutes=135)
+
+
 def parse(path, aliases, today):
     start = season_year(today)
     rows, unknown, bad = [], set(), []
@@ -90,6 +94,15 @@ def parse(path, aliases, today):
             bad.append(raw)
             continue
         played = fh is not None and fa is not None
+        if played and NOW is not None and d >= NOW.date():
+            # pages show live scores during a match: only accept a score once the match must be over
+            if d > NOW.date():
+                played = False
+            elif hhmm:
+                hh, mi = (int(x) for x in hhmm.split(":"))
+                played = NOW >= datetime(d.year, d.month, d.day, hh, mi) + LIVE_MARGIN
+            else:
+                played = NOW.hour >= 23
         rows.append({"round": int(rnd), "date": d, "time": hhmm or "", "h": alias(aliases, h) or h, "a": alias(aliases, a) or a,
                      "fh": int(fh) if played else None, "fa": int(fa) if played else None})
     return rows, unknown, bad
@@ -191,9 +204,21 @@ def main():
     ap.add_argument("--plan", action="store_true", help="only print which files to fetch today")
     ap.add_argument("--no-net", action="store_true", help="skip football-data.co.uk and The Odds API")
     ap.add_argument("--odds-key", default=os.environ.get("ODDS_API_KEY"), help="The Odds API key")
+    ap.add_argument("--now", help="local time 'YYYY-MM-DD HH:MM' (default: the clock); bets only use matches after it")
     args = ap.parse_args()
     root = Path(args.root)
     today = date.fromisoformat(args.today)
+    global NOW
+    if args.now:
+        now_s = args.now
+    else:
+        try:
+            from zoneinfo import ZoneInfo
+            n = datetime.now(ZoneInfo("Europe/Brussels"))
+            now_s = n.strftime("%Y-%m-%d %H:%M") if n.date() == today else f"{today} 07:45"
+        except Exception:  # noqa: BLE001
+            now_s = f"{today} 07:45"
+    NOW = datetime.strptime(now_s, "%Y-%m-%d %H:%M")
     leagues = json.load(open(HERE / "leagues.json"))
     aliases = {dv: norm_aliases(a) for dv, a in json.load(open(HERE / "aliases.json")).items()}
     cups = json.load(open(HERE / "cups.json"))
@@ -409,8 +434,9 @@ def main():
         fixtures += new_fx
         st["fixtures"] = len(new_fx)
 
-    # ---- European cups: fixtures only (results are not used as features)
+    # ---- European cups: fixtures (results are not used as features, only to settle superbet legs)
     cup_fx_files = {(c, n) for c, n in rounds}
+    cup_played = []
     for code, c in cups.items():
         st = {"name": c["name"], "status": "ok", "fixtures": 0, "warnings": []}
         report["leagues"][code] = st
@@ -431,6 +457,8 @@ def main():
             known = {v["team"] for v in cup_alias.values()}
             fx = [r for r in rows if r["fh"] is None and today <= r["date"] <= today + timedelta(days=FIXTURE_DAYS)
                   and r["h"] in known and r["a"] in known]
+            cup_played += [{"div": code, "date": str(r["date"]), "home": r["h"], "away": r["a"], "fh": r["fh"], "fa": r["fa"]}
+                           for r in rows if r["fh"] is not None and r["fa"] is not None and r["date"] <= today]
             fixtures += [{"div": code, "round": f"Speeldag {n}", "when": f"{r['date']} {r['time']}".strip(),
                           "h": r["h"], "a": r["a"]} for r in sorted(fx, key=lambda r: (r["date"], r["time"]))]
             st["fixtures"] += len(fx)
@@ -439,6 +467,16 @@ def main():
             fixtures += keep
             st["fixtures"] = len(keep)
             st["status"] = "niets op te halen" if not [r for r in rounds if r[0] == code] else "niet opgehaald"
+
+    crp = state / "cup_results.csv"
+    cup_res = pd.read_csv(crp) if crp.exists() else pd.DataFrame(columns=["div", "date", "home", "away", "fh", "fa"])
+    if cup_played:
+        cup_res = pd.concat([cup_res, pd.DataFrame(cup_played)], ignore_index=True)
+    if len(cup_res):
+        cup_res = cup_res.drop_duplicates(subset=["div", "date", "home", "away"], keep="last")
+        cup_res = cup_res[pd.to_datetime(cup_res.date) >= pd.Timestamp(today - timedelta(days=150))].sort_values(["date", "div"])
+    cup_res.to_csv(crp, index=False)
+    report["cup_results"] = int(len(cup_res))
 
     # ---- topscorers from voetbalkrant (goals + minutes): Jupiler Pro League, Champions League, Europa League.
     # Only a fallback for the page when API-Football has no player data for a match.
@@ -596,14 +634,34 @@ def main():
     sbp = state / "superbet.json"
     failed = [k for k, v in report["leagues"].items() if v.get("status") == "fout"]
     json.dump(failed, open(out / "failed_leagues.json", "w"))
-    run("node", str(HERE / "superbet_cli.js"), str(out), str(today), str(sbp))
+    # superbet of the week: settle its legs first (a lost one can get a second chance in superbet_cli.js)
+    wkp = state / "superbet_week.json"
+    try:
+        import track
+        import weekly
+        idx = track.results_index(pd.concat([rec, cup_res], ignore_index=True) if len(cup_res) else rec, fd_all if len(fd_all) else None)
+        weekly.run(state, today, idx)
+    except Exception as e:  # noqa: BLE001
+        report["superbet_week_error"] = f"{type(e).__name__}: {e}"
+    run("node", str(HERE / "superbet_cli.js"), str(out), str(today), str(sbp), str(wkp), now_s)
     sb = json.load(open(sbp))
-    report["superbet"] = {"legs": len(sb["legs"]), "odds": sb["odds"], "p": round(sb["p"], 4),
-                          "bets": [f"{x['when']} {x['h']}-{x['a']}: {x['label']} ({x['odd']})" for x in sb["legs"]]}
+    W = json.load(open(wkp)) if wkp.exists() else None
+    leg = lambda x: f"{x['when']} {x['h']}-{x['a']}: {x['label']} ({x['odd']})" + ({1: " ✓", 0: " ✗", "void": " vervallen"}.get(x.get("hit"), ""))  # noqa: E731
+    report["superbet"] = {"week": W.get("week") if W else None, "active": sb.get("name"), "status": sb.get("status"),
+                          "legs": len(sb.get("legs", [])), "odds": sb.get("odds"), "p": round(sb.get("p") or 0, 4),
+                          "bets": [leg(x) for x in sb.get("legs", [])]}
+    if W:
+        for k in ("main", "second"):
+            if W.get(k):
+                report["superbet"][k] = {"name": W[k]["name"], "status": W[k]["status"], "odds": W[k]["odds"],
+                                         "legs_hit": W[k].get("legs_hit"), "legs": len(W[k]["legs"]), "lost_on": W[k].get("lost_on"),
+                                         "bets": [leg(x) for x in W[k]["legs"]]}
+        if W.get("secondNote"):
+            report["superbet"]["second_note"] = W["secondNote"]
     try:  # track record (predictions vs results); never blocks the update
         import track
         tr = track.run(root, today, out)
-        report["track"] = {k: tr.get(k) for k in ("settled", "open", "all", "superbet")}
+        report["track"] = {k: tr.get(k) for k in ("settled", "open", "all", "superbet_week", "players")}
     except Exception as e:  # noqa: BLE001
         report["track"] = {"error": str(e)}
     run(sys.executable, "-I", str(HERE / "build.py"), str(out), str(root / "dist" / "streakscout.html"))

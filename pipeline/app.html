@@ -162,6 +162,19 @@ button, input, select { font: inherit; color: inherit }
 .combo.super ol li { line-height: 1.45 }
 .combo.super .lg { font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--muted); text-transform: uppercase; margin-right: 6px }
 .combo.super .alt { display: block; font-size: 12px; color: var(--muted) }
+.combo.super ol { list-style: none; padding-left: 0; gap: 6px }
+.combo.super ol li { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: start }
+.leg-st { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font: 700 12px/1 var(--f-body); margin-top: 1px }
+.leg-st.ok { background: var(--hit); color: var(--surface) }
+.leg-st.ko { background: var(--bad); color: var(--surface) }
+.leg-st.vd { background: var(--sunk); color: var(--muted) }
+.leg-st.op { box-shadow: inset 0 0 0 1.5px var(--line) }
+.combo.super .score { font-weight: 600; color: var(--ink) }
+.sb-status { font-weight: 600 }
+.sb-status.won { color: var(--hit) } .sb-status.lost { color: var(--bad) }
+.combo.super.won { border-color: var(--hit); box-shadow: inset 4px 0 0 var(--hit) }
+.combo.super.lost { border-color: var(--line); box-shadow: inset 4px 0 0 var(--bad) }
+.combo.super.lost ol { opacity: .85 }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 2px }
 .oddstbl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 16px; font-size: 13px; background: var(--bg); border-radius: var(--r); padding: 8px 12px }
 .oddstbl span { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); padding: 3px 0 }
@@ -317,12 +330,7 @@ footer a { color: inherit }
 
   <section id="p-best" role="tabpanel" aria-labelledby="t-best" hidden>
     <div style="display:grid; gap:12px">
-      <div class="combo super" id="superCard" hidden>
-        <div class="combo-head"><h3>Superbet van de dag</h3><span class="pl-meta" id="superMeta"></span></div>
-        <ol id="superLegs"></ol>
-        <div class="combo-sum" id="superSum"></div>
-        <p class="note" id="superNote"></p>
-      </div>
+      <div id="superWrap" style="display:grid; gap:12px"></div>
       <p class="note" id="bestSub"></p>
       <div class="toolbar">
         <div class="seg" role="group" aria-label="Sorteren">
@@ -1094,30 +1102,53 @@ const HIST = /*__HISTORY__*/null;
     return list;
   }
   const slipLabel = (b) => `${dn(b.H)} – ${dn(b.A)}: ${b.label}`;
-  function renderSuper() {
-    const sb = DATA.superbet, card = $("superCard");
-    card.hidden = !sb || !sb.legs || sb.legs.length < 2;
-    if (card.hidden) return;
+  // superbet of the week (made once, legs get ✓ or ✗ when played) and its second chance when it is lost
+  const nowLocal = () => { const n = new Date(); return new Date(n.getTime() - n.getTimezoneOffset() * 6e4).toISOString().slice(0, 16).replace("T", " "); };
+  function superCardHTML(b, key, W) {
     const lname = (d) => (DATA.divNames[d] || (DATA.cups[d] && DATA.cups[d].name) || d);
     const nm = (t) => DISPLAY[t] || t;
-    $("superMeta").textContent = `alle competities · ${fmtISO(sb.from)} en ${fmtISO(sb.to)} · ${sb.legs.length} bets`;
     const oddTxt = (l) => (l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}${l.derived ? " (afgeleid)" : ""}` : `±${l.odd.toFixed(2)} geschat`);
+    const icon = (l) => (l.hit === 1 ? `<span class="leg-st ok" title="gewonnen">✓</span>` : l.hit === 0 ? `<span class="leg-st ko" title="verloren">✗</span>`
+      : l.hit === "void" ? `<span class="leg-st vd" title="vervallen (geen uitslag)">–</span>` : `<span class="leg-st op" title="nog te spelen"></span>`);
     const altTxt = (l) => {
-      if (!l.alt) return "";
+      if (!l.alt || l.hit != null || b.status !== "bezig") return "";
       const short = l.alt.id.startsWith("nolose") ? (l.alt.id.endsWith("@H") ? "1X" : "X2") : l.alt.id.startsWith("win") ? "winst" : l.alt.label;
       return `<span class="alt">liever dan ${esc(short)}: ${pct(l.alt.p)} kans voor ${l.alt.priced ? "" : "±"}${l.alt.odd.toFixed(2)}</span>`;
     };
-    $("superLegs").innerHTML = sb.legs.map((l) => `<li><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))} · ${pct(l.p)} · ${oddTxt(l)}</small>${altTxt(l)}</li>`).join("");
-    const one = Math.round(1 / sb.p);
-    $("superSum").innerHTML = `<span>Combi-odd <b>${sb.odds.toFixed(2)}</b>${sb.allPriced ? "" : " (deels geschat)"}</span><span>Kans volgens reeksen <b>${(sb.p * 100).toFixed(1)}%</b> (1 op ${one})</span><button class="go" id="superGo">Zet in combi</button>`;
-    $("superNote").textContent = `Eén bet per match, enkel markten waar reeksen historisch standhouden. Per match wordt afgewogen wat het meest oplevert voor het risico: een zege geeft meer odd, 1X of X2 is veiliger. Van alle combinaties tot ±${sb.target}x is dit die met de grootste kans. ${sb.allPriced ? "" : "Waar geen bookmakerodd bekend is, staat een schatting (eerlijke odd min een gewone marge van 5%). "}Zo'n superbet komt gemiddeld maar 1 op ${one} keer binnen: zet er enkel een klein bedrag op.`;
-    $("superGo").onclick = () => {
-      for (const l of sb.legs) {
+    const legs = b.legs.map((l) => `<li>${icon(l)}<span><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""} · ${pct(l.p)} · ${oddTxt(l)}</small>${altTxt(l)}</span></li>`).join("");
+    const n = b.legs.length, hit = b.legs.filter((l) => l.hit === 1).length, open = b.legs.filter((l) => l.hit == null).length;
+    const st = b.status === "gewonnen" ? `<span class="sb-status won">Gewonnen! ${hit} van ${n} binnen</span>`
+      : b.status === "verloren" ? `<span class="sb-status lost">Verloren${b.lost_on ? ` bij ${esc(b.lost_on)}` : ""}</span>`
+      : b.status === "vervallen" ? `<span class="sb-status">Vervallen: geen enkele match gespeeld</span>`
+      : `<span class="sb-status">${hit ? `${hit} van ${n} al binnen, ` : ""}nog ${open} te spelen</span>`;
+    const one = Math.round(1 / b.p);
+    const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
+    const sum = `<span>${st}</span><span>Combi-odd <b>${b.odds.toFixed(2)}</b>${b.allPriced ? "" : " (deels geschat)"}</span><span>Kans volgens reeksen <b>${(b.p * 100).toFixed(1)}%</b> (1 op ${one})</span>${canAdd ? `<button class="go" data-sb="${key}">Zet in combi</button>` : ""}`;
+    const madeTxt = b.made ? `${fmtISO(b.made.slice(0, 10))}${b.made.length > 10 ? " om " + b.made.slice(11, 16) : ""}` : "";
+    const note = key === "main"
+      ? `Eén keer per week gemaakt (op ${madeTxt}) en daarna niet meer veranderd: elke gespeelde match krijgt een ✓ of ✗. Eén bet per match, enkel markten waar reeksen historisch standhouden; van alle combinaties tot ±${b.target}x is dit die met de grootste kans. ${b.allPriced ? "" : "Waar geen bookmakerodd bekend is, staat een schatting (eerlijke odd min een gewone marge van 5%). "}Zo'n superbet komt gemiddeld maar 1 op ${one} keer binnen: zet er enkel een klein bedrag op.`
+      : `Gemaakt op ${madeTxt} omdat de superbet van de week verloren was: ±${b.target}x uit de matches die toen nog moesten beginnen, niet uit de matches van de verloren superbet. Ook deze verandert niet meer.`;
+    const cls = b.status === "gewonnen" ? " won" : b.status === "verloren" ? " lost" : "";
+    return `<div class="combo super${cls}"><div class="combo-head"><h3>${esc(b.name || (key === "main" ? "Superbet of the week" : "Second chance"))}</h3>
+      <span class="pl-meta">week ${W.weekNo || W.week.slice(-2)} · ${fmtISO(W.from)} – ${fmtISO(W.to)} · ${n} bets · alle competities</span></div>
+      <ol>${legs}</ol><div class="combo-sum">${sum}</div><p class="note">${note}</p></div>`;
+  }
+  function renderSuper() {
+    const W = DATA.superbetWeek, wrap = $("superWrap");
+    if (!W || !W.main || !W.main.legs || W.main.legs.length < 2) { wrap.innerHTML = ""; return; }
+    const cards = [];
+    if (W.second) cards.push(superCardHTML(W.second, "second", W));
+    cards.push(superCardHTML(W.main, "main", W));
+    if (!W.second && W.main.status === "verloren" && W.secondNote) cards.push(`<p class="note">Geen second chance: ${esc(W.secondNote.replace(/^\S+: /, ""))}.</p>`);
+    wrap.innerHTML = cards.join("");
+    wrap.querySelectorAll("button[data-sb]").forEach((btn) => btn.addEventListener("click", () => {
+      const b = W[btn.dataset.sb], nm = (t) => DISPLAY[t] || t;
+      for (const l of b.legs) {
         const k = `${l.mkey}|${l.id}`;
         if (!state.slip.some((x) => x.k === k)) state.slip.push({ k, match: l.mkey, label: `${nm(l.h)} – ${nm(l.a)}: ${l.label}`, p: l.p });
       }
       store.set("slip", state.slip); renderSlip(); renderBest();
-    };
+    }));
   }
   function renderBest() {
     renderSuper();

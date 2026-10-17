@@ -120,6 +120,11 @@ def run(root, today, out_dir):
     rec = pd.read_csv(state / "recent.csv") if (state / "recent.csv").exists() else pd.DataFrame()
     fdp = state / "fd_results.csv"
     fd = pd.read_csv(fdp) if fdp.exists() else None
+    crp = state / "cup_results.csv"
+    if crp.exists():
+        cr = pd.read_csv(crp)
+        if len(cr):
+            rec = pd.concat([rec, cr], ignore_index=True) if len(rec) else cr
     idx = results_index(rec, fd)
 
     # predictions: add today's (latest prediction for a match/market wins), settle, prune
@@ -144,7 +149,7 @@ def run(root, today, out_dir):
     hp = state / "superbet_history.json"
     hist = json.load(open(hp)) if hp.exists() else []
     sbp = state / "superbet.json"
-    if sbp.exists():
+    if sbp.exists() and "week" not in json.load(open(sbp)):  # old daily superbets only; weekly ones: weekly.py
         sb = json.load(open(sbp))
         hist = [x for x in hist if x.get("made") != sb.get("made")]
         hist.append({"made": sb.get("made"), "odds": sb.get("odds"), "p": round(sb.get("p", 0), 4),
@@ -166,6 +171,11 @@ def run(root, today, out_dir):
     summary = summarise(P, today)
     summary["players"] = run_players(state, today, out_dir)
     done = [x for x in hist if x["settled"]]
+    try:
+        import weekly
+        summary["superbet_week"] = weekly.summary(state)
+    except Exception as e:  # noqa: BLE001
+        summary["superbet_week"] = {"error": str(e)}
     summary["superbet"] = {"days_settled": len(done), "won": sum(1 for x in done if x["won"]),
                            "legs_hit": sum(x["legs_hit"] for x in done), "legs": sum(len(x["legs"]) for x in done),
                            "last": [{"made": x["made"], "won": x["won"], "legs_hit": x["legs_hit"], "legs": len(x["legs"]),

@@ -197,6 +197,75 @@ def parse_players(path, aliases):
     return rows, bad, unknown
 
 
+def _leg_txt(x):
+    bk = f"{x['bk']} {x['odd']}" if x.get("bk") else f"±{x['odd']} geschat"
+    return f"{x['when']} {x['h']}-{x['a']}: {x['label']} ({bk})" + ({1: " ✓", 0: " ✗", "void": " vervallen"}.get(x.get("hit"), ""))
+
+
+def _bet_txt(b):
+    if not b:
+        return None
+    if b.get("none"):
+        return {"none": True, "reason": b.get("note")}
+    return {"name": b.get("name"), "status": b.get("status"), "odds": b.get("odds"), "p": round(b.get("p") or 0, 4),
+            "legs_hit": b.get("legs_hit"), "legs": len(b.get("legs", [])), "lost_on": b.get("lost_on"),
+            "chosen_by": b.get("chosen_by"), "reason": b.get("reason"), "bets": [_leg_txt(x) for x in b.get("legs", [])],
+            "why": [x.get("why") for x in b.get("legs", [])], "leg_reasons": [x.get("reason") for x in b.get("legs", [])]}
+
+
+def bets_report(state, out, today, report):
+    """report.json sections for the betje van de dag, the weekly bets (each with its BTTS-optie) and the deep dive."""
+    bjp, sbp, wkp = state / "betje.json", state / "superbet.json", state / "superbet_week.json"
+    try:  # betje van de dag: today's (or why there is none) and how yesterday's went
+        B = json.load(open(bjp)) if bjp.exists() else []
+        cur = next((b for b in B if b.get("day") == str(today)), None)
+        prev = [b for b in B if b.get("day", "") < str(today) and not b.get("none")]
+        report["betje"] = ({"today": None} if not cur else
+                           dict({"today": "geen", "reason": cur.get("note")}) if cur.get("none") else
+                           dict({"today": "ja"}, **_bet_txt(cur)))
+        if cur:
+            report["betje"]["btts"] = _bet_txt(cur.get("btts"))
+        if prev:
+            y = prev[-1]
+            report["betje"]["previous"] = {"day": y["day"], "odds": y["odds"], "status": y["status"],
+                                           "legs_hit": y.get("legs_hit"), "legs": len(y["legs"]), "bets": [_leg_txt(x) for x in y["legs"]],
+                                           "btts": _bet_txt(y.get("btts"))}
+        import weekly
+        report["betje"]["record"] = weekly.betje_summary(state)
+    except Exception as e:  # noqa: BLE001
+        report["betje"] = {"error": f"{type(e).__name__}: {e}"}
+    sb = json.load(open(sbp)) if sbp.exists() else {}
+    W = json.load(open(wkp)) if wkp.exists() else None
+    report["superbet"] = {"week": W.get("week") if W else None, "active": sb.get("name"), "status": sb.get("status"),
+                          "legs": len(sb.get("legs", [])), "odds": sb.get("odds"), "p": round(sb.get("p") or 0, 4),
+                          "bets": [_leg_txt(x) for x in sb.get("legs", [])]}
+    if W:
+        for k in ("main", "second"):
+            if W.get(k):
+                report["superbet"][k] = _bet_txt(W[k])
+                report["superbet"][k]["btts"] = _bet_txt(W[k].get("btts"))
+        if W.get("secondNote"):
+            report["superbet"]["second_note"] = W["secondNote"]
+    try:  # deep dive: what the bet maker did with the research and Claude's picks, and what is left to research
+        fin = json.load(open(out / "finalize.json"))
+        dz = json.load(open(state / "dossier.json"))
+        report["deep_dive"] = dict(fin, todo=[f"{m['when']} {m['home']}-{m['away']}" for m in dz.get("matches", []) if m.get("research_due")])
+    except Exception as e:  # noqa: BLE001
+        report["deep_dive"] = {"error": f"{type(e).__name__}: {e}"}
+
+
+def finalize(root, today, now_s):
+    """After the deep dive: merge the research, use Claude's picks when they meet the rules, rebuild the page."""
+    state, out = root / "state", root / "out"
+    report = json.load(open(state / "report.json"))
+    subprocess.run(["node", str(HERE / "superbet_cli.js"), str(out), str(today), str(state / "superbet.json"),
+                    str(state / "superbet_week.json"), now_s, str(state / "betje.json"), "finalize"], check=True)
+    bets_report(state, out, today, report)
+    subprocess.run([sys.executable, "-I", str(HERE / "build.py"), str(out), str(root / "dist" / "streakscout.html")], check=True)
+    json.dump(report, open(state / "report.json", "w"), ensure_ascii=False, indent=1, default=str)
+    print(json.dumps({k: report.get(k) for k in ("betje", "superbet", "deep_dive")}, ensure_ascii=False, indent=1, default=str))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", required=True)
@@ -205,6 +274,7 @@ def main():
     ap.add_argument("--no-net", action="store_true", help="skip football-data.co.uk and The Odds API")
     ap.add_argument("--odds-key", default=os.environ.get("ODDS_API_KEY"), help="The Odds API key")
     ap.add_argument("--now", help="local time 'YYYY-MM-DD HH:MM' (default: the clock); bets only use matches after it")
+    ap.add_argument("--finalize", action="store_true", help="after the deep dive: use the research and Claude's picks, rebuild the page")
     args = ap.parse_args()
     root = Path(args.root)
     today = date.fromisoformat(args.today)
@@ -219,6 +289,9 @@ def main():
         except Exception:  # noqa: BLE001
             now_s = f"{today} 07:45"
     NOW = datetime.strptime(now_s, "%Y-%m-%d %H:%M")
+    if args.finalize:
+        finalize(root, today, now_s)
+        return
     leagues = json.load(open(HERE / "leagues.json"))
     aliases = {dv: norm_aliases(a) for dv, a in json.load(open(HERE / "aliases.json")).items()}
     cups = json.load(open(HERE / "cups.json"))
@@ -654,37 +727,7 @@ def main():
         report["superbet_week_error"] = f"{type(e).__name__}: {e}"
     bjp = state / "betje.json"
     run("node", str(HERE / "superbet_cli.js"), str(out), str(today), str(sbp), str(wkp), now_s, str(bjp))
-    try:  # betje van de dag: today's (or why there is none) and how yesterday's went
-        B = json.load(open(bjp)) if bjp.exists() else []
-        cur = next((b for b in B if b.get("day") == str(today)), None)
-        prev = [b for b in B if b.get("day", "") < str(today) and not b.get("none")]
-        bl = lambda x: f"{x['when']} {x['h']}-{x['a']}: {x['label']} ({x['bk']} {x['odd']})" + ({1: " ✓", 0: " ✗", "void": " vervallen"}.get(x.get("hit"), ""))  # noqa: E731
-        report["betje"] = ({"today": None} if not cur else
-                           {"today": "geen", "reason": cur.get("note")} if cur.get("none") else
-                           {"today": "ja", "odds": cur["odds"], "p": round(cur["p"], 4), "status": cur["status"],
-                            "bets": [bl(x) for x in cur["legs"]], "why": [x.get("why") for x in cur["legs"]]})
-        if prev:
-            y = prev[-1]
-            report["betje"]["previous"] = {"day": y["day"], "odds": y["odds"], "status": y["status"],
-                                           "legs_hit": y.get("legs_hit"), "legs": len(y["legs"]), "bets": [bl(x) for x in y["legs"]]}
-        import weekly
-        report["betje"]["record"] = weekly.betje_summary(state)
-    except Exception as e:  # noqa: BLE001
-        report["betje"] = {"error": f"{type(e).__name__}: {e}"}
-    sb = json.load(open(sbp))
-    W = json.load(open(wkp)) if wkp.exists() else None
-    leg = lambda x: f"{x['when']} {x['h']}-{x['a']}: {x['label']} ({x['odd']})" + ({1: " ✓", 0: " ✗", "void": " vervallen"}.get(x.get("hit"), ""))  # noqa: E731
-    report["superbet"] = {"week": W.get("week") if W else None, "active": sb.get("name"), "status": sb.get("status"),
-                          "legs": len(sb.get("legs", [])), "odds": sb.get("odds"), "p": round(sb.get("p") or 0, 4),
-                          "bets": [leg(x) for x in sb.get("legs", [])]}
-    if W:
-        for k in ("main", "second"):
-            if W.get(k):
-                report["superbet"][k] = {"name": W[k]["name"], "status": W[k]["status"], "odds": W[k]["odds"],
-                                         "legs_hit": W[k].get("legs_hit"), "legs": len(W[k]["legs"]), "lost_on": W[k].get("lost_on"),
-                                         "bets": [leg(x) for x in W[k]["legs"]]}
-        if W.get("secondNote"):
-            report["superbet"]["second_note"] = W["secondNote"]
+    bets_report(state, out, today, report)
     try:  # track record (predictions vs results); never blocks the update
         import track
         tr = track.run(root, today, out)

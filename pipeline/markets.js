@@ -153,7 +153,7 @@
       const all = betsFor(eng, DATA, HIST, H, A, f.div, o.from);
       const opts = [];
       for (const b of all) {
-        if (b.p < minP || b.rel.lvl < 2) continue;
+        if ((o.ids && !o.ids.has(b.id)) || b.p < minP || b.rel.lvl < (o.minLvl ?? 2)) continue;
         if (NEEDS_STATS(b) && !fresh(f.div)) continue; // stale statistics: skip
         const odd = legOdd(b);
         if (odd < minOdd) continue;

@@ -182,6 +182,13 @@ button, input, select { font: inherit; color: inherit }
 .why li b { color: var(--ink); font-weight: 600 }
 .bj-hist { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--muted) }
 .bj-hist span { white-space: nowrap }
+.vb { display: inline-block; font: 600 11px/1.6 var(--f-body); padding: 0 7px; border-radius: 9px; margin-right: 4px; text-transform: uppercase; letter-spacing: .03em }
+.vb.sterk, .vb.ok { background: var(--hit-soft); color: var(--hit) } .vb.riskant { background: var(--warn-soft); color: var(--warn) }
+.vb.afgeraden { background: var(--bad-soft); color: var(--bad) }
+.dd { margin-top: 4px; color: var(--ink) } .dd p { margin: 3px 0 } .dd details summary { font-weight: 500; color: var(--accent); cursor: pointer }
+.dd .src a { color: var(--accent); word-break: break-word } .why .pick { color: var(--ink) }
+.btts-opt { border-top: 1px dashed var(--line); padding-top: 10px; display: grid; gap: 8px }
+.btts-opt h4 { margin: 0; font-size: 14px }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 2px }
 .oddstbl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 16px; font-size: 13px; background: var(--bg); border-radius: var(--r); padding: 8px 12px }
 .oddstbl span { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); padding: 3px 0 }
@@ -1070,7 +1077,10 @@ const HIST = /*__HISTORY__*/null;
       <p><b>MLS.</b> De uitslagen van 2026 komen per speeldag van voetbalkrant.com en zijn bij het toevoegen nagekeken tegen de officiële stand (alle 30 ploegen identiek); De reeksen steunen op dit seizoen. Voor de MLS is er geen Elo en geen corners, kaarten, schoten of ruststanden, dus enkel uitslag- en goalmarkten. Play-offs zitten er niet in.</p>
       <p><b>Schoten en dubbele kans.</b> Schoten en schoten op doel per ploeg (10+, 13+, 3+ en 5+ op doel, meer schoten dan de tegenstander) volgen hetzelfde model; van alle markten houden schotreeksen het best stand. Ze komen uit dezelfde bron als corners en lopen dus even ver achter. Dubbele kans (1X, X2, 12): waar enkel 1X2-odds bekend zijn, wordt de odd daaruit afgeleid.</p>
       <p><b>Spelers.</b> Uit API-Football: per match minuten, goals, assists, schoten, schoten op doel en kaarten van elke speler, plus blessures en schorsingen. Per speler een cijfer per 90 minuten dit seizoen (de laatste matchen tellen zwaarder, en met weinig minuten wordt het naar het gemiddelde van zijn positie getrokken) × zijn verwachte speeltijd (laatste 5 matchen) × de match: de verwachte goals van zijn ploeg volgens het model voor goals en assists, en wat de tegenstander toelaat (thuis of uit) voor schoten en kaarten. De kans geldt als hij meespeelt, zoals bij de bookmaker, waar een spelersbet vervalt als de speler niet meedoet. Is er geen API-Football-data, dan valt de site terug op de topschutters van voetbalkrant (Jupiler Pro League, Champions League, Europa League; enkel scoren). Nog niet getest zoals de ploegmarkten: het trackrecord loopt sinds oktober 2026.</p>
-      <p><b>Betje van de dag.</b> Op dagen met matches met bookmakerodds maakt de update één combi van ±5x (2 tot 4 bets, één per match) uit de matches van die dag. Enkel 1X2 en over/under 2.5 met een echte odd van minstens 1,60, en enkel bets waar het model minstens 3 procentpunt meer kans ziet dan de bookmaker (zonder marge). Omdat de markt bij grote verschillen meestal gelijk heeft, telt als kans het gemiddelde van het model en de bookmaker; na dat middelen moet elke bet nog waarde hebben. Van alle combinaties van ±4x tot 7,5x wordt die met de grootste kans gekozen. Geen zulke bets, dan is er die dag geen betje. Elke bet krijgt, net als bij de superbet, een uitleg: de reeksen van beide ploegen, het competitiegemiddelde, de vorm en wat model en bookmaker denken. Waarde volgens een model is geen garantie: zie de tabel hierboven.</p>
+      <p><b>Betje van de dag.</b> Elke ochtend maakt het model een voorstel van ±5x (2 tot 4 bets, één per match) uit de matches van die dag: enkel 1X2 en over/under 2.5 met een echte odd van minstens 1,60 waar het model minstens 3 procentpunt meer kans ziet dan de bookmaker (zonder marge); als kans telt het gemiddelde van model en bookmaker, omdat de markt bij grote verschillen meestal gelijk heeft.</p>
+      <p><b>Deep dive.</b> Daarna onderzoekt Claude elke kandidaat-match van die dag en elke bet van de week die vandaag of morgen gespeeld wordt op het web, bij betrouwbare bronnen (officiële clubs en competities, grote sportmedia, statistiek- en blessuresites): vorm in alle competities, onderlinge duels, blessures en schorsingen, verwachte opstelling, scheidsrechter en kaarten, context (stand, belang, vermoeidheid). Met de cijfers van het model als vertrekpunt redeneert Claude over alle markten (uitslag, goals, BTTS, corners, kaarten, schoten) en kiest het betje en de BTTS-optie zelf; elke bet krijgt een oordeel (sterk, ok, riskant of afgeraden), een uitleg en de bronnen. De superbet van de week verandert na de dag waarop hij gemaakt is niet meer: daar is het onderzoek enkel een beoordeling. Komt de keuze van Claude niet door de controle (verkeerd aantal bets, totale odd buiten ±4–7,5x, een bet die het onderzoek zelf afraadt), dan blijft het voorstel van het model staan.</p>
+      <p><b>BTTS-optie.</b> Bij elk betje en elke superbet hoort een tweede combi van ongeveer dezelfde odd, enkel uit "beide teams scoren: ja/nee". BTTS-reeksen houden historisch minder goed stand dan uitslagreeksen, en bookmakerodds voor BTTS hebben we niet: die odds zijn geschat.</p>
+      <p><b>Afrekenen.</b> Uitslag- en goalbets worden afgerekend op de eindstand; corners, kaarten (geel + rood), schoten en ruststanden op de matchstatistieken van football-data.co.uk, die een paar dagen later binnenkomen. Komen die er na 12 dagen niet, dan vervalt de bet.</p>
       <p><b>Odds.</b> Voor 1X2 en over/under 2.5 toont de app bookmakerodds van football-data.co.uk (onder meer Bet365, Pinnacle en de gemiddelde en hoogste marktprijs) en van The Odds API (onder meer Unibet, Pinnacle en William Hill). Odds van Belgische bookmakers zoals Napoleon zijn niet vrij beschikbaar; de beste gevonden prijs krijg je daar dus niet altijd. De marktkans is de kans die de odds van Pinnacle (of het marktgemiddelde) impliceren na het wegnemen van de marge.</p>
       <p><b>Data.</b> Uitslagen, corners, kaarten en odds van football-data.co.uk via de open dataset Club-Football-Match-Data, Elo van ClubElo. Die dataset wordt maar een paar keer per jaar bijgewerkt. Daarom komen recente uitslagen en het speelschema elke ochtend van voetbalkrant.com. Elke update wordt eerst gecontroleerd tegen de matchen die al bekend zijn; klopt er iets niet, dan blijft die competitie op de vorige stand. Die recente uitslagen bevatten enkel goals, dus corners en kaarten lopen achter. Elo-sterkte van ClubElo tot 1 september, daarna na elke uitslag bijgewerkt met de Elo-formule (t/m ${fmtISO(DATA.eloDate)}).</p>`;
   }
@@ -1139,15 +1149,51 @@ const HIST = /*__HISTORY__*/null;
     const cls = b.status === "gewonnen" ? " won" : b.status === "verloren" ? " lost" : "";
     return `<div class="combo super${cls}"><div class="combo-head"><h3>${esc(b.name || (key === "main" ? "Superbet of the week" : "Second chance"))}</h3>
       <span class="pl-meta">week ${W.weekNo || W.week.slice(-2)} · ${fmtISO(W.from)} – ${fmtISO(W.to)} · ${n} bets · alle competities</span></div>
-      <ol>${legs}</ol><div class="combo-sum">${sum}</div><p class="note">${note}</p>${whyHTML(b)}</div>`;
+      <ol>${legs}</ol><div class="combo-sum">${sum}</div><p class="note">${note}</p>${whyHTML(b)}${bttsHTML(b.btts, key + ".btts")}</div>`;
   }
-  // per leg: why it was chosen (written by the daily update when the bet was made)
-  function whyHTML(b) {
-    const nm = (t) => DISPLAY[t] || t, L = (b.legs || []).filter((l) => l.why);
-    if (!L.length) return "";
-    return `<details class="why" open><summary>Waarom deze bets?</summary><ul>${L.map((l) =>
-      `<li><b>${esc(nm(l.h))} – ${esc(nm(l.a))} · ${esc(l.label)}</b><br>${esc(l.why)}</li>`).join("")}</ul>
-      ${L.length < b.legs.length ? `<p class="note">Bets zonder uitleg waren al begonnen toen de uitleg werd toegevoegd.</p>` : ""}</details>`;
+  // per leg: why it was chosen: Claude's reason after the deep dive, the model's numbers and the research (sources)
+  const rkey = (l) => `${l.when.slice(0, 10)}|${l.div}|${l.h}|${l.a}`;
+  function researchHTML(l) {
+    const r = (DATA.research || {})[rkey(l)];
+    if (!r) return "";
+    const m = Array.isArray(r.markets) ? r.markets.find((x) => x.id === l.id) : null;
+    const nm = (t) => DISPLAY[t] || t;
+    const abs = (side, t) => { const L = (r.absences && r.absences[side]) || []; return L.length ? `<p><b>Afwezig bij ${esc(nm(t))}:</b> ${L.map(esc).join("; ")}</p>` : ""; };
+    const src = (r.sources || []).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title || x.url)}</a>`).join(" · ");
+    const more = [r.form ? `<p><b>Vorm:</b> ${esc(r.form)}</p>` : "", r.h2h ? `<p><b>Onderling:</b> ${esc(r.h2h)}</p>` : "",
+      abs("home", l.h), abs("away", l.a), r.referee ? `<p><b>Scheidsrechter:</b> ${esc(r.referee)}</p>` : "",
+      r.context ? `<p><b>Context:</b> ${esc(r.context)}</p>` : "", r.cards ? `<p><b>Kaarten:</b> ${esc(r.cards)}</p>` : "",
+      r.btts ? `<p><b>BTTS:</b> ${esc(r.btts)}</p>` : "", src ? `<p class="src"><b>Bronnen:</b> ${src}</p>` : ""].join("");
+    return `<div class="dd"><p>${m ? `<span class="vb ${esc(m.verdict)}">${esc(m.verdict)}</span>${esc(m.reason || "")}` : ""}</p>
+      <p><b>Deep dive</b> (${esc((r.checked || "").slice(5, 16).replace("-", "/"))}): ${esc(r.summary)}</p>${more ? `<details><summary>Meer uit het onderzoek</summary>${more}</details>` : ""}</div>`;
+  }
+  function whyHTML(b, title) {
+    const nm = (t) => DISPLAY[t] || t, L = (b.legs || []).filter((l) => l.why || l.reason || (DATA.research || {})[rkey(l)]);
+    if (!L.length && !b.reason) return "";
+    const head = b.reason ? `<p class="note"><b>${b.chosen_by === "claude" ? "Keuze van Claude na de deep dive" : "Waarom deze combi"}:</b> ${esc(b.reason)}</p>` : "";
+    return `<details class="why" open><summary>${esc(title || "Waarom deze bets?")}</summary>${head}<ul>${L.map((l) =>
+      `<li><b>${esc(nm(l.h))} – ${esc(nm(l.a))} · ${esc(l.label)}</b>${l.reason ? `<br><span class="pick">${esc(l.reason)}</span>` : ""}${l.why ? `<br>${esc(l.why)}` : ""}${researchHTML(l)}</li>`).join("")}</ul>
+      ${L.length < (b.legs || []).length ? `<p class="note">Bets zonder uitleg waren al begonnen toen de uitleg werd toegevoegd.</p>` : ""}</details>`;
+  }
+  const legIcon = (l) => (l.hit === 1 ? `<span class="leg-st ok" title="gewonnen">✓</span>` : l.hit === 0 ? `<span class="leg-st ko" title="verloren">✗</span>`
+    : l.hit === "void" ? `<span class="leg-st vd" title="vervallen (geen uitslag)">–</span>` : `<span class="leg-st op" title="nog te spelen"></span>`);
+  const betStatus = (b) => {
+    const n = b.legs.length, hit = b.legs.filter((l) => l.hit === 1).length, open = b.legs.filter((l) => l.hit == null).length;
+    return b.status === "gewonnen" ? `<span class="sb-status won">Gewonnen! ${hit} van ${n} binnen</span>`
+      : b.status === "verloren" ? `<span class="sb-status lost">Verloren${b.lost_on ? ` bij ${esc(b.lost_on)}` : ""}</span>`
+      : b.status === "vervallen" ? `<span class="sb-status">Vervallen: geen enkele match gespeeld</span>`
+      : `<span class="sb-status">${hit ? `${hit} van ${n} al binnen, ` : ""}nog ${open} te spelen</span>`;
+  };
+  // BTTS-optie: a combi of about the same odds from "beide teams scoren: ja/nee" only
+  function bttsHTML(bt, key) {
+    if (!bt) return "";
+    if (bt.none) return `<div class="btts-opt"><h4>BTTS-optie</h4><p class="note">Geen BTTS-optie: ${esc(bt.note || "geen sterke BTTS-bets")}.</p></div>`;
+    const lname = (d) => (DATA.divNames[d] || (DATA.cups[d] && DATA.cups[d].name) || d), nm = (t) => DISPLAY[t] || t;
+    const legs = bt.legs.map((l) => `<li>${legIcon(l)}<span><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""} · ${pct(l.pb ?? l.p)} · ${l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}` : `±${l.odd.toFixed(2)} geschat`}</small></span></li>`).join("");
+    const canAdd = bt.status === "bezig" && bt.legs.every((l) => l.hit == null && l.when > nowLocal());
+    return `<div class="btts-opt"><h4>BTTS-optie · ${bt.odds.toFixed(2)}x</h4><ol>${legs}</ol>
+      <div class="combo-sum"><span>${betStatus(bt)}</span><span>Kans <b>${(bt.p * 100).toFixed(bt.p < 0.1 ? 1 : 0)}%</b> (1 op ${Math.round(1 / bt.p)})</span>${canAdd ? `<button class="go" data-sb="${key}">Zet in combi</button>` : ""}</div>
+      <p class="note">Zelfde idee, maar enkel "beide teams scoren: ja/nee", één per match. Bookmakerodds voor BTTS hebben we niet: de odds zijn geschat (eerlijke odd min 5% marge).</p>${whyHTML(bt, "Waarom deze BTTS-bets?")}</div>`;
   }
   // Betje van de dag: ±5x from today's matches with real bookmaker odds, only legs with value
   function betjeCardHTML(BJ) {
@@ -1159,11 +1205,11 @@ const HIST = /*__HISTORY__*/null;
     const b = BJ.today;
     if (!b || b.none) {
       return `<div class="combo super"><div class="combo-head"><h3>Betje van de dag</h3><span class="pl-meta">${b ? esc(fmtISO(b.day)) : ""}</span></div>
-        <p class="note">Vandaag geen betje${b && b.note ? `: ${esc(b.note)}` : ""}. Er komt er alleen een als er matches zijn met een mooie odd waar het model duidelijk meer kans ziet dan de bookmaker.</p>${recTxt ? `<p class="note">${recTxt}</p>` : ""}${hist}</div>`;
+        <p class="note">${b && b.chosen_by === "claude" ? `Vandaag geen betje: na de deep dive vond Claude geen bets die goed genoeg zijn. ${esc(b.note || "")}` : `Vandaag geen betje${b && b.note ? `: ${esc(b.note)}` : ""}. Er komt er alleen een als er goede bets zijn met een mooie odd.`}</p>${recTxt ? `<p class="note">${recTxt}</p>` : ""}${hist}${b ? bttsHTML(b.btts, "betje.btts") : ""}</div>`;
     }
     const icon = (l) => (l.hit === 1 ? `<span class="leg-st ok" title="gewonnen">✓</span>` : l.hit === 0 ? `<span class="leg-st ko" title="verloren">✗</span>`
       : l.hit === "void" ? `<span class="leg-st vd" title="vervallen (geen uitslag)">–</span>` : `<span class="leg-st op" title="nog te spelen"></span>`);
-    const legs = b.legs.map((l) => `<li>${icon(l)}<span><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""} · ${pct(l.pb)} · ${esc(l.bk)} ${l.odd.toFixed(2)}</small></span></li>`).join("");
+    const legs = b.legs.map((l) => `<li>${icon(l)}<span><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""} · ${pct(l.pb ?? l.p)} · ${l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}${l.derived ? " (afgeleid)" : ""}` : `±${l.odd.toFixed(2)} geschat`}</small></span></li>`).join("");
     const n = b.legs.length, hit = b.legs.filter((l) => l.hit === 1).length, open = b.legs.filter((l) => l.hit == null).length;
     const st = b.status === "gewonnen" ? `<span class="sb-status won">Gewonnen! ${hit} van ${n} binnen</span>`
       : b.status === "verloren" ? `<span class="sb-status lost">Verloren${b.lost_on ? ` bij ${esc(b.lost_on)}` : ""}</span>`
@@ -1173,10 +1219,10 @@ const HIST = /*__HISTORY__*/null;
     const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
     const sum = `<span>${st}</span><span>Combi-odd <b>${b.odds.toFixed(2)}</b></span><span>Kans <b>${(b.p * 100).toFixed(0)}%</b> (1 op ${Math.round(1 / b.p)})</span><span>Verwachte opbrengst <b>${ev >= 0 ? "+" : "−"}${Math.abs(ev)}%</b></span>${canAdd ? `<button class="go" data-sb="betje">Zet in combi</button>` : ""}`;
     const cls = b.status === "gewonnen" ? " won" : b.status === "verloren" ? " lost" : "";
-    const note = `Elke dag één keer gemaakt uit de matches van die dag met een echte bookmakerodd (1X2 en over/under 2.5), van 2 tot 4 bets en ±${b.target}x. Er gaan enkel bets in met een odd van minstens 1,60 waar het model meer kans ziet dan de bookmaker. De kans hierboven is het gemiddelde van het model en de bookmaker (zonder marge): waar ze sterk verschillen, heeft de markt meestal gelijk. Ook met waarde blijft het een gok: hou de inzet klein.`;
+    const note = b.chosen_by === "claude" ? `Gekozen door Claude na een deep dive op elke match (vorm in alle competities, onderlinge duels, blessures en schorsingen, scheidsrechter, context) uit alle markten van vandaag, met de cijfers van het model als vertrekpunt: 2 tot 4 bets, samen ±5x. Waar geen bookmakerodd bekend is, is de odd geschat. Ook na onderzoek blijft het een gok: hou de inzet klein.` : `Elke dag één keer gemaakt uit de matches van die dag met een echte bookmakerodd (1X2 en over/under 2.5), van 2 tot 4 bets en ±${b.target || 5}x. Er gaan enkel bets in met een odd van minstens 1,60 waar het model meer kans ziet dan de bookmaker. De kans hierboven is het gemiddelde van het model en de bookmaker (zonder marge): waar ze sterk verschillen, heeft de markt meestal gelijk. Ook met waarde blijft het een gok: hou de inzet klein.`;
     return `<div class="combo super${cls}"><div class="combo-head"><h3>Betje van de dag</h3>
       <span class="pl-meta">${esc(fmtISO(b.day))} · ${n} bets · ±${b.target}x</span></div>
-      <ol>${legs}</ol><div class="combo-sum">${sum}</div><p class="note">${note}${recTxt ? ` ${recTxt}` : ""}</p>${hist}${whyHTML(b)}</div>`;
+      <ol>${legs}</ol><div class="combo-sum">${sum}</div><p class="note">${note}${recTxt ? ` ${recTxt}` : ""}</p>${hist}${whyHTML(b)}${bttsHTML(b.btts, "betje.btts")}</div>`;
   }
   function renderSuper() {
     const W = DATA.superbetWeek, wrap = $("superWrap"), BJ = DATA.betje;
@@ -1189,7 +1235,7 @@ const HIST = /*__HISTORY__*/null;
     }
     wrap.innerHTML = cards.join("");
     wrap.querySelectorAll("button[data-sb]").forEach((btn) => btn.addEventListener("click", () => {
-      const key = btn.dataset.sb, b = key === "betje" ? BJ.today : W[key], nm = (t) => DISPLAY[t] || t;
+      const [k0, k1] = btn.dataset.sb.split("."), b0 = k0 === "betje" ? BJ.today : W[k0], b = k1 ? b0[k1] : b0, nm = (t) => DISPLAY[t] || t;
       for (const l of b.legs) {
         const k = `${l.mkey}|${l.id}`;
         if (!state.slip.some((x) => x.k === k)) state.slip.push({ k, match: l.mkey, label: `${nm(l.h)} – ${nm(l.a)}: ${l.label}`, p: l.pb ?? l.p });

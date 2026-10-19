@@ -31,22 +31,48 @@ def status(bet):
     return "bezig"
 
 
-def settle_bet(bet, idx, today):
+STATS_WAIT = 12  # days to wait for football-data's corners/cards/shots before a stats leg is voided
+
+
+def _stats_idx(state):
+    import pandas as pd
+    p = Path(state) / "fd_results.csv"
+    return track.stats_index(pd.read_csv(p)) if p.exists() else {}
+
+
+def settle_bet(bet, idx, today, sidx=None):
+    """Settle the legs of one bet (and of its BTTS option). Score markets settle from the results; corners,
+    cards, shots and half-time markets from football-data's match statistics (which come in a few days later)."""
+    sidx = sidx or {}
     for l in bet.get("legs", []):
+        d = date.fromisoformat(l["when"][:10])
+        if l.get("hit") == "void" and l["id"] in track.STATS_RULES and not l.get("void_checked") and (today - d).days <= STATS_WAIT:
+            l["hit"] = None  # voided too early by an older version: try again
         if l.get("hit") in (0, 1, "void"):
             continue
-        d = date.fromisoformat(l["when"][:10])
         res = track.find_result(idx, l["div"], l["h"], l["a"], d)
         if res:
             l["score"] = f"{res[1]}-{res[2]}"
             h = track.outcome(l["id"], res[1], res[2])
-            l["hit"] = h if h is not None else "void"
-        elif (today - d).days > 3:
+            if h is not None:
+                l["hit"] = h
+                continue
+        if l["id"] in track.STATS_RULES:
+            h = track.stats_outcome(sidx, l["id"], l["div"], l["h"], l["a"], d)
+            if h is not None:
+                l["hit"] = h
+            elif (today - d).days > STATS_WAIT:
+                l["hit"], l["void_checked"] = "void", True
+        elif not res and (today - d).days > 3:
             l["hit"] = "void"
+        elif res:
+            l["hit"] = "void"  # a market the score does not settle and that has no statistics rule
     bet["status"] = status(bet)
     bet["legs_hit"] = sum(1 for l in bet.get("legs", []) if l.get("hit") == 1)
     lost = [l for l in bet.get("legs", []) if l.get("hit") == 0]
     bet["lost_on"] = f"{lost[0]['h']} – {lost[0]['a']}: {lost[0]['label']}" if lost else None
+    if bet.get("btts"):
+        settle_bet(bet["btts"], idx, today, sidx)
     return bet
 
 
@@ -56,10 +82,11 @@ def run(state, today, idx):
     wp, ap = state / "superbet_week.json", state / "superbet_weeks.json"
     W = json.load(open(wp)) if wp.exists() else None
     arch = json.load(open(ap)) if ap.exists() else []
+    sidx = _stats_idx(state)
     if W:
         for k in ("main", "second"):
             if W.get(k):
-                settle_bet(W[k], idx, today)
+                settle_bet(W[k], idx, today, sidx)
         wk, _mon, _sun = week_of(today)
         if W.get("week") != wk:
             # a new week has started: archive the old one (its last legs may still settle in later runs)
@@ -68,8 +95,9 @@ def run(state, today, idx):
     # legs of archived weeks that were still open
     for x in arch[-3:]:
         for k in ("main", "second"):
-            if x.get(k) and x[k].get("status") == "bezig":
-                settle_bet(x[k], idx, today)
+            if x.get(k) and (x[k].get("status") == "bezig" or (x[k].get("btts") or {}).get("status") == "bezig"
+                             or any(l.get("hit") == "void" and l["id"] in track.STATS_RULES and not l.get("void_checked") for l in x[k]["legs"])):
+                settle_bet(x[k], idx, today, sidx)
     json.dump(arch[-26:], open(ap, "w"), ensure_ascii=False, indent=1)
     if W:
         json.dump(W, open(wp, "w"), ensure_ascii=False, indent=1)
@@ -84,9 +112,10 @@ def run_betje(state, today, idx):
     if not p.exists():
         return []
     B = json.load(open(p))
+    sidx = _stats_idx(state)
     for b in B:
-        if not b.get("none") and b.get("status") in (None, "bezig"):
-            settle_bet(b, idx, today)
+        if not b.get("none") and (b.get("status") in (None, "bezig") or (b.get("btts") or {}).get("status") == "bezig"):
+            settle_bet(b, idx, today, sidx)
     json.dump(B, open(p, "w"), ensure_ascii=False, indent=1)
     return B
 
@@ -104,9 +133,20 @@ def betje_summary(state):
                 o *= leg["odd"]
         return o
     profit = sum(eff(b) - 1 if b["status"] == "gewonnen" else -1 for b in done)
+    bt = [b["btts"] for b in B if b.get("btts") and not b["btts"].get("none")]
+    bdone = [b for b in bt if b.get("status") in ("gewonnen", "verloren")]
+    bprofit = sum(eff(b) - 1 if b["status"] == "gewonnen" else -1 for b in bdone)
+    by = {}
+    for b in done:
+        k = b.get("chosen_by") or "model"
+        by.setdefault(k, {"settled": 0, "won": 0})
+        by[k]["settled"] += 1
+        by[k]["won"] += b["status"] == "gewonnen"
     return {"days": len(B), "made": len(bets), "settled": len(done), "won": sum(1 for b in done if b["status"] == "gewonnen"),
             "profit_units": round(profit, 2), "legs_hit": sum(b.get("legs_hit", 0) for b in done),
-            "legs": sum(len(b["legs"]) for b in done)}
+            "legs": sum(len(b["legs"]) for b in done), "by_chooser": by,
+            "btts": {"made": len(bt), "settled": len(bdone), "won": sum(1 for b in bdone if b["status"] == "gewonnen"),
+                     "profit_units": round(bprofit, 2)}}
 
 
 def summary(state):
@@ -117,7 +157,9 @@ def summary(state):
     weeks = arch + ([cur] if cur else [])
     done = [w for w in weeks if w.get("main") and w["main"].get("status") in ("gewonnen", "verloren")]
     sec = [w["second"] for w in weeks if w.get("second") and w["second"].get("status") in ("gewonnen", "verloren")]
+    bt = [w[k]["btts"] for w in weeks for k in ("main", "second") if w.get(k) and (w[k].get("btts") or {}).get("status") in ("gewonnen", "verloren")]
     return {"weeks_settled": len(done), "won": sum(1 for w in done if w["main"]["status"] == "gewonnen"),
+            "btts_settled": len(bt), "btts_won": sum(1 for b in bt if b["status"] == "gewonnen"),
             "second_chances_settled": len(sec), "second_won": sum(1 for s in sec if s["status"] == "gewonnen"),
             "current": None if not cur else {"week": cur.get("week"), "main": cur["main"].get("status"),
                                              "legs_hit": cur["main"].get("legs_hit"), "legs": len(cur["main"].get("legs", [])),

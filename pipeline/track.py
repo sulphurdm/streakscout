@@ -29,6 +29,49 @@ def outcome(mid, fh, fa):
     return None if v is None else int(v)
 
 
+STATS_RULES = {
+    "htwin@H": lambda s: s["hh"] > s["ha"], "htwin@A": lambda s: s["ha"] > s["hh"], "htg": lambda s: s["hh"] + s["ha"] >= 1,
+    "c85": lambda s: s["ch"] + s["ca"] >= 9, "c95": lambda s: s["ch"] + s["ca"] >= 10, "u95": lambda s: s["ch"] + s["ca"] <= 9,
+    "c105": lambda s: s["ch"] + s["ca"] >= 11, "mcorn@H": lambda s: s["ch"] > s["ca"], "mcorn@A": lambda s: s["ca"] > s["ch"],
+    "c45@H": lambda s: s["ch"] >= 5, "c45@A": lambda s: s["ca"] >= 5,
+    "k35": lambda s: s["kh"] + s["ka"] >= 4, "u35k": lambda s: s["kh"] + s["ka"] <= 3, "k45": lambda s: s["kh"] + s["ka"] >= 5,
+    "sh10@H": lambda s: s["sh"] >= 10, "sh10@A": lambda s: s["sa"] >= 10, "sh13@H": lambda s: s["sh"] >= 13, "sh13@A": lambda s: s["sa"] >= 13,
+    "sot3@H": lambda s: s["th"] >= 3, "sot3@A": lambda s: s["ta"] >= 3, "sot5@H": lambda s: s["th"] >= 5, "sot5@A": lambda s: s["ta"] >= 5,
+    "msh@H": lambda s: s["sh"] > s["sa"], "msh@A": lambda s: s["sa"] > s["sh"],
+}
+STATS_COLS = {"hh": "HTHome", "ha": "HTAway", "ch": "HomeCorners", "ca": "AwayCorners", "sh": "HomeShots", "sa": "AwayShots",
+              "th": "HomeTarget", "ta": "AwayTarget"}
+
+
+def stats_index(fd):
+    """(div, home, away) -> list of (date, stats) from football-data (corners, cards = yellow + red, shots, half-time)."""
+    idx = {}
+    if fd is None or not len(fd):
+        return idx
+    for r in fd.to_dict("records"):
+        s = {k: r.get(c) for k, c in STATS_COLS.items()}
+        y = [r.get("HomeYellow"), r.get("HomeRed"), r.get("AwayYellow"), r.get("AwayRed")]
+        s["kh"] = None if any(pd.isna(v) for v in y[:2]) else y[0] + y[1]
+        s["ka"] = None if any(pd.isna(v) for v in y[2:]) else y[2] + y[3]
+        s = {k: (None if v is None or pd.isna(v) else float(v)) for k, v in s.items()}
+        idx.setdefault((r["Division"], r["HomeTeam"], r["AwayTeam"]), []).append((pd.Timestamp(r["MatchDate"]).date(), s))
+    return idx
+
+
+def stats_outcome(sidx, mid, dv, h, a, d):
+    """1/0 for a corners/cards/shots/half-time market from football-data, None if those numbers are not in yet."""
+    rule = STATS_RULES.get(mid)
+    if rule is None:
+        return None
+    for rd, s in sidx.get((dv, h, a), []):
+        if abs((rd - d).days) <= 1:
+            try:
+                return int(bool(rule(s)))
+            except TypeError:  # a needed number is missing
+                return None
+    return None
+
+
 def results_index(recent, fd=None):
     """(div, home, away) -> list of (date, fh, fa) from the verified recent results (and football-data)."""
     idx = {}

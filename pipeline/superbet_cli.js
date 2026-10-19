@@ -4,13 +4,14 @@
 // is made once. Both are shown on the page (data.superbetWeek); state/superbet.json holds the bet that is still running.
 // Betje van de dag: a combi of about 5x from today's matches with real bookmaker odds where the model sees value
 // (markets.js betje); made once a day (a day without one is tried again at a later update that day), settled in weekly.py.
-// Every bet has a BTTS-optie ("btts"): a combi of about the same odds from "beide teams scoren: ja/nee" only.
+// Every leg of these bets also gets "bttsOpt": the BTTS bet (yes or no) of its match, to add to a combi; BTTS bets can
+// also be legs themselves (in the superbet when p >= 62%, in the betje when Claude picks them after the deep dive).
 // Every leg gets "why": one line on why the model likes it (streaks, average, model and bookmaker).
 //
 // Deep dive (the daily scheduled task): this script writes state/dossier.json with the matches to research (today's
 // betje candidates and the weekly legs that are made today or played today/tomorrow), with the model's numbers for
 // every market. Claude researches them on the web and writes <root>/research/*.json and state/choice.json (its own
-// picks for today's betje and BTTS-optie, and for the weekly bets when they were made today). With "finalize" this
+// picks for today's betje, and for the weekly superbet when it was made today). With "finalize" this
 // script merges the research into state/research.json, checks Claude's picks (constraints below) and uses them,
 // otherwise it keeps the model's picks; the page shows the research per match (data.research).
 const fs = require("fs");
@@ -46,20 +47,23 @@ let W = readJ(weekFile, null);
 if (W && W.week !== W0.week) W = null;
 const make = (target, maxLegs, exclude) => M.superbet(eng, data, hist,
   { from: today, to: W0.sun, after: now, target, maxLegs, minP: 0.62, skipDivs: failed, exclude });
-// BTTS-optie: only "beide teams scoren: ja/nee"; streaks in this market are weak, so any signal level counts
-const makeBtts = (to, target, maxLegs, exclude) => M.superbet(eng, data, hist,
-  { from: today, to, after: now, target, maxLegs, minP: to === today ? 0.52 : 0.58, minLvl: 1, ids: BTTS, skipDivs: failed, exclude });
 const stamp = (b, name) => Object.assign(b, { name, made: now, status: "bezig", legs_hit: 0, skipped: failed,
   legs: b.legs.map((l) => Object.assign(l, { hit: null })) });
-const bttsOf = (b, name) => (b.reached && b.legs.length >= 2 ? stamp(b, name)
-  : { name, none: true, made: now, note: b.candidates ? `met ${b.candidates} match${b.candidates === 1 ? "" : "en"} met een sterke BTTS-kans kwam geen combi van ±${b.target}x uit` : "geen enkele match met een duidelijke BTTS-kans" });
 // explanation per leg, written when the bet is made (or later for legs that have not been played yet)
+const bttsFor = (l) => {
+  const H = tix.get(l.h), A = tix.get(l.a);
+  if (H == null || A == null || BTTS.has(l.id)) return null;
+  const c = M.betsFor(eng, data, hist, H, A, l.div, today).filter((x) => BTTS.has(x.id)).sort((x, y) => y.p - x.p)[0];
+  return c ? { id: c.id, label: c.label, p: Math.round(c.p * 1000) / 1000, odd: Math.round((0.95 / c.p) * 100) / 100, sig: c.rel.lvl } : null;
+};
 const explain = (b) => {
   for (const l of (b && b.legs) || []) {
-    if (l.why || l.hit != null || l.when <= now) continue;
+    if (l.hit != null || l.when <= now) continue;
+    // BTTS-optie: "beide teams scoren" (yes or no) in the same match, to add to a combi
+    if (!l.bttsOpt) { try { const o = bttsFor(l); if (o) l.bttsOpt = o; } catch (e) { /* none */ } }
+    if (l.why) continue;
     try { const w = M.explainLeg(eng, data, hist, l, today); if (w) l.why = w; } catch (e) { /* no explanation */ }
   }
-  if (b && b.btts) explain(b.btts);
 };
 
 let made = null;
@@ -77,12 +81,6 @@ if (!FINAL) {
     if (sc.reached && sc.legs.length >= 2) { W.second = stamp(sc, "Second chance"); made = "second"; }
     else W.secondNote = `${today}: te weinig matches over deze week voor een second chance van ±10x`;
   }
-  // BTTS-optie of the weekly bets: made together with them (or now, for a week that started without one)
-  if (W && W.main && !W.main.btts) W.main.btts = bttsOf(makeBtts(W0.sun, 20, 12), "BTTS-optie");
-  if (W && W.second && !W.second.btts) {
-    const used = new Set(W.main.legs.map((l) => l.h + "|" + l.a));
-    W.second.btts = bttsOf(makeBtts(W0.sun, 10, 10, used), "BTTS-optie");
-  }
 }
 if (W) { explain(W.main); explain(W.second); }
 
@@ -99,7 +97,6 @@ if (!bjToday && !FINAL) {
       legs: bj.legs.map((l) => Object.assign(l, { hit: null })) });
     bjMade = true;
   } else bjToday = { day: today, none: true, made: now, note: bj.note, priced: bj.priced, candidates: bj.candidates };
-  bjToday.btts = bttsOf(makeBtts(today, 5, 6), "BTTS-optie");
   BJ.push(bjToday);
   BJ = BJ.slice(-60);
 }
@@ -108,7 +105,9 @@ if (bjToday) explain(bjToday);
 
 // ---- dossier for the deep dive: the matches to research, with the model's numbers for every market
 const RESEARCH = readJ(path.join(stateDir, "research.json"), {});
-const fresh = (k) => RESEARCH[k] && RESEARCH[k].checked && (Date.parse(now.replace(" ", "T")) - Date.parse(RESEARCH[k].checked.replace(" ", "T"))) < 20 * 3600e3;
+// research counts as fresh for 20 hours, unless it was "limited" (too few pages could be read): then it is done again
+const fresh = (k) => RESEARCH[k] && RESEARCH[k].checked && !RESEARCH[k].limited
+  && (Date.parse(now.replace(" ", "T")) - Date.parse(RESEARCH[k].checked.replace(" ", "T"))) < 20 * 3600e3;
 const lname = (d) => (data.divNames && data.divNames[d]) || (data.cups && data.cups[d] && data.cups[d].name) || d;
 const nm = (t) => M.DISPLAY[t] || t;
 function teamStats(t, n) {
@@ -165,7 +164,7 @@ function writeDossier() {
     }
   };
   // today's matches: candidates for the betje and its BTTS-optie (at most 10, the model's own picks first)
-  const own = new Set([...(bjToday && !bjToday.none ? bjToday.legs : []), ...((bjToday && bjToday.btts && !bjToday.btts.none) ? bjToday.btts.legs : [])].map((l) => l.h + "|" + l.a));
+  const own = new Set((bjToday && !bjToday.none ? bjToday.legs : []).map((l) => l.h + "|" + l.a));
   const cands = [];
   for (const f of data.fixtures) {
     if (f.when.slice(0, 10) !== today || f.when <= now || failed.includes(f.div)) continue;
@@ -178,11 +177,9 @@ function writeDossier() {
   }
   cands.sort((x, y) => y.score - x.score).slice(0, 10).forEach((c) => add(c.f, "kandidaat betje van de dag", null));
   if (bjToday && !bjToday.none) legsOf(bjToday, "betje van de dag");
-  if (bjToday && bjToday.btts) legsOf(bjToday.btts, "BTTS-optie van het betje");
   if (W) for (const [k, nmK] of [["main", "superbet of the week"], ["second", "second chance"]]) {
     if (!W[k]) continue;
     legsOf(W[k], nmK, true);
-    legsOf(W[k].btts, `BTTS-optie (${nmK})`, true);
   }
   const matches = [];
   for (const { f, roles } of byKey.values()) {
@@ -198,11 +195,10 @@ function writeDossier() {
   matches.sort((x, y) => x.priority - y.priority || (x.when < y.when ? -1 : 1));
   const weekMadeToday = !!(W && W.main && (W.main.made || "").startsWith(today));
   fs.writeFileSync(path.join(stateDir, "dossier.json"), JSON.stringify({ today, now, rules: {
-    betje: "2 tot 4 bets uit de matches van vandaag (rol 'kandidaat betje van de dag'), één per match, elke markt mag (uitslag, goals, BTTS, corners, kaarten, schoten); samen 4 tot 7,5x (mik op ±5x); enkel bets die je na je onderzoek 'sterk' of 'ok' vindt",
-    btts: "2 tot 6 bets 'btts' of 'bttsno' uit de matches van vandaag, één per match, samen 3,5 tot 8x (mik op ±5x)",
-    week: weekMadeToday ? "de superbet van de week is vandaag gemaakt: je mag hem nog aanpassen (2 tot 14 bets uit alle matches van deze week in het dossier, samen 15 tot 30x); daarna verandert hij niet meer" : "de weekbets liggen vast: enkel onderzoeken en beoordelen",
+    betje: "2 tot 4 bets uit de matches van vandaag (rol 'kandidaat betje van de dag'), één per match, elke markt mag (uitslag, goals, BTTS ja/nee, corners, kaarten, schoten); samen 4 tot 7,5x (mik op ±5x); enkel bets die je na je onderzoek 'sterk' of 'ok' vindt",
+    week: weekMadeToday ? "de superbet van de week is vandaag gemaakt: je mag hem nog aanpassen (2 tot 14 bets uit alle matches van deze week in het dossier, elke markt mag, ook BTTS; samen 15 tot 30x); daarna verandert hij niet meer" : "de weekbets liggen vast: enkel onderzoeken en beoordelen",
     current: { betje: bjToday && !bjToday.none ? bjToday.legs.map((l) => ({ key: keyOf(l), id: l.id })) : [],
-      btts: bjToday && bjToday.btts && !bjToday.btts.none ? bjToday.btts.legs.map((l) => ({ key: keyOf(l), id: l.id })) : [] },
+    },
     week_made_today: weekMadeToday }, matches }, null, 1));
   return matches;
 }
@@ -264,54 +260,38 @@ if (FINAL) {
     const r = readJ(path.join(rdir, fn), null);
     if (!r || typeof r.key !== "string" || typeof r.summary !== "string" || !Array.isArray(r.sources)) { fin.research_bad.push(fn); continue; }
     r.sources = r.sources.filter((s) => s && /^https?:\/\//.test(s.url || "")).slice(0, 12);
-    r.checked = r.checked || now;
+    r.checked = now; // the time of this run (subagents do not always know the clock)
+    r.limited = !!r.limited || r.sources.length < 3;
     RESEARCH[r.key] = r;
     fin.research_files++;
   }
   for (const k of Object.keys(RESEARCH)) if (k.slice(0, 10) < new Date(Date.parse(today) - 21 * 864e5).toISOString().slice(0, 10)) delete RESEARCH[k];
   fs.writeFileSync(path.join(stateDir, "research.json"), JSON.stringify(RESEARCH, null, 1));
   const choice = readJ(path.join(stateDir, "choice.json"), {});
-  // Claude can also decide there is no good betje (or BTTS-optie) today: empty legs with a reason
+  // Claude can also decide there is no good betje today: empty legs with a reason
   const noneOf = (ch) => ch && Array.isArray(ch.legs) && !ch.legs.length && ch.reason;
   if (bjToday && noneOf(choice.betje)) {
-    const keepBtts = bjToday.btts;
     BJ = BJ.filter((x) => x.day !== today);
-    bjToday = { day: today, none: true, made: bjToday.made || now, decided: now, chosen_by: "claude", note: String(choice.betje.reason).slice(0, 600), btts: keepBtts };
+    bjToday = { day: today, none: true, made: bjToday.made || now, decided: now, chosen_by: "claude", note: String(choice.betje.reason).slice(0, 600) };
     BJ.push(bjToday);
     fin.choice.betje = "geen betje vandaag (keuze van Claude)";
     delete choice.betje;
-  }
-  if (bjToday && noneOf(choice.btts)) {
-    bjToday.btts = { name: "BTTS-optie", none: true, made: now, chosen_by: "claude", note: String(choice.btts.reason).slice(0, 600) };
-    fin.choice.btts = "geen BTTS-optie vandaag (keuze van Claude)";
-    delete choice.btts;
   }
   // today's betje
   if (bjToday && choice.betje) {
     const [b, err] = applyChoice("betje", choice.betje, { min: 2, max: 4, lo: 4, hi: 7.5, day: today });
     if (b) {
-      const keepBtts = bjToday.btts;
       BJ = BJ.filter((x) => x.day !== today);
-      bjToday = Object.assign({ day: today, target: 5, name: "Betje van de dag", made: bjToday.made || now, decided: now, status: "bezig", legs_hit: 0 }, b, { btts: keepBtts });
+      bjToday = Object.assign({ day: today, target: 5, name: "Betje van de dag", made: bjToday.made || now, decided: now, status: "bezig", legs_hit: 0 }, b);
       BJ.push(bjToday);
       fin.choice.betje = "gebruikt";
     } else fin.choice.betje = `niet gebruikt: ${err}`;
   }
-  if (bjToday && choice.btts) {
-    const [b, err] = applyChoice("btts", choice.btts, { min: 2, max: 6, lo: 3.5, hi: 8, day: today, ids: BTTS });
-    if (b) { bjToday.btts = Object.assign({ name: "BTTS-optie", target: 5, made: now, status: "bezig", legs_hit: 0 }, b); fin.choice.btts = "gebruikt"; }
-    else fin.choice.btts = `niet gebruikt: ${err}`;
-  }
   // the weekly superbet only while it is still the day it was made
   if (W && W.main && (W.main.made || "").startsWith(today) && choice.week) {
     const [b, err] = applyChoice("week", choice.week, { min: 2, max: 14, lo: 15, hi: 30, to: W0.sun });
-    if (b) { W.main = Object.assign({ name: "Superbet of the week", target: 20, from: today, to: W0.sun, made: W.main.made, decided: now, status: "bezig", legs_hit: 0, btts: W.main.btts }, b); fin.choice.week = "gebruikt"; }
+    if (b) { W.main = Object.assign({ name: "Superbet of the week", target: 20, from: today, to: W0.sun, made: W.main.made, decided: now, status: "bezig", legs_hit: 0 }, b); fin.choice.week = "gebruikt"; }
     else fin.choice.week = `niet gebruikt: ${err}`;
-  }
-  if (W && W.main && W.main.btts && (W.main.made || "").startsWith(today) && choice.week_btts) {
-    const [b, err] = applyChoice("week_btts", choice.week_btts, { min: 2, max: 12, lo: 15, hi: 30, to: W0.sun, ids: BTTS });
-    if (b) { W.main.btts = Object.assign({ name: "BTTS-optie", target: 20, made: now, status: "bezig", legs_hit: 0 }, b); fin.choice.week_btts = "gebruikt"; }
-    else fin.choice.week_btts = `niet gebruikt: ${err}`;
   }
   if (W) { explain(W.main); explain(W.second); }
   if (bjToday) explain(bjToday);

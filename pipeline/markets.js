@@ -153,7 +153,9 @@
       const all = betsFor(eng, DATA, HIST, H, A, f.div, o.from);
       const opts = [];
       for (const b of all) {
-        if ((o.ids && !o.ids.has(b.id)) || b.p < minP || b.rel.lvl < (o.minLvl ?? 2)) continue;
+        // BTTS (yes/no) is allowed at any signal level: its streaks are weak, but it is a popular leg for a combi
+        const lvlOk = b.rel.lvl >= (o.minLvl ?? 2) || ((b.id === "btts" || b.id === "bttsno") && o.btts !== false);
+        if ((o.ids && !o.ids.has(b.id)) || b.p < minP || !lvlOk) continue;
         if (NEEDS_STATS(b) && !fresh(f.div)) continue; // stale statistics: skip
         const odd = legOdd(b);
         if (odd < minOdd) continue;

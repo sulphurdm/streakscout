@@ -1,10 +1,13 @@
-// node superbet_cli.js <outdir> <YYYY-MM-DD> <state/superbet.json> [<state/superbet_week.json> <now "YYYY-MM-DD HH:MM">]
+// node superbet_cli.js <outdir> <YYYY-MM-DD> <state/superbet.json> [<state/superbet_week.json> <now "YYYY-MM-DD HH:MM"> <state/betje.json>]
 // Superbet of the week: made once at the first update of the week (Monday to Sunday) and never changed afterwards;
 // weekly.py settles its legs. When it is lost and enough matches are left this week, a "Second chance" of about 10x
 // is made once. Both are shown on the page (data.superbetWeek); state/superbet.json holds the bet that is still running.
 const fs = require("fs");
 const path = require("path");
-const [out, today, stateFile, weekFile, nowArg] = process.argv.slice(2);
+// Betje van de dag: a combi of about 5x from today's matches with real bookmaker odds where the model sees value
+// (markets.js betje); made once a day (a day without one is tried again at a later update that day), settled in weekly.py.
+// Every leg of these bets gets "why": one line on why it was chosen (streaks, average, model and bookmaker).
+const [out, today, stateFile, weekFile, nowArg, betjeFile] = process.argv.slice(2);
 const data = JSON.parse(fs.readFileSync(path.join(out, "app_data.json")));
 const model = JSON.parse(fs.readFileSync(path.join(out, "model.json")));
 const hist = JSON.parse(fs.readFileSync(path.join(out, "history.json")));
@@ -47,6 +50,44 @@ if (!W) {
   if (sc.reached && sc.legs.length >= 2) { W.second = stamp(sc, "Second chance"); made = "second"; }
   else W.secondNote = `${today}: te weinig matches over deze week voor een second chance van ±10x`;
 }
+// explanation per leg, written when the bet is made (or later for legs that have not been played yet)
+const explain = (b) => {
+  for (const l of (b && b.legs) || []) {
+    if (l.why || l.hit != null || l.when <= now) continue;
+    try { const w = M.explainLeg(eng, data, hist, l, today); if (w) l.why = w; } catch (e) { /* no explanation */ }
+  }
+};
+if (W) { explain(W.main); explain(W.second); }
+
+// Betje van de dag
+let BJ = [];
+try { if (betjeFile) BJ = JSON.parse(fs.readFileSync(betjeFile)); } catch (e) { BJ = []; }
+if (!Array.isArray(BJ)) BJ = [];
+let bjToday = BJ.find((x) => x.day === today && !x.none);
+let bjMade = false;
+if (!bjToday && betjeFile) {
+  const bj = M.betje(eng, data, hist, { day: today, after: now, skipDivs: failed });
+  BJ = BJ.filter((x) => x.day !== today);
+  if (bj.legs.length >= 2) {
+    bjToday = Object.assign(bj, { name: "Betje van de dag", made: now, status: "bezig", legs_hit: 0,
+      legs: bj.legs.map((l) => Object.assign(l, { hit: null })) });
+    explain(bjToday);
+    bjMade = true;
+  } else bjToday = { day: today, none: true, made: now, note: bj.note, priced: bj.priced, candidates: bj.candidates };
+  BJ.push(bjToday);
+  BJ = BJ.slice(-60);
+}
+const effOdds = (b) => b.legs.filter((l) => l.hit !== "void").reduce((a, l) => a * l.odd, 1);
+const done = BJ.filter((x) => !x.none && (x.status === "gewonnen" || x.status === "verloren"));
+const won = done.filter((x) => x.status === "gewonnen");
+data.betje = {
+  today: bjToday || null,
+  recent: BJ.filter((x) => !x.none && x.day < today).slice(-7).reverse()
+    .map((x) => ({ day: x.day, odds: x.odds, status: x.status, legs_hit: x.legs_hit, legs: x.legs.length })),
+  record: { n: done.length, won: won.length, profit: Math.round(done.reduce((s, x) => s + (x.status === "gewonnen" ? effOdds(x) - 1 : -1), 0) * 100) / 100 },
+};
+if (betjeFile) fs.writeFileSync(betjeFile, JSON.stringify(BJ, null, 1));
+
 data.superbetWeek = W;
 delete data.superbet;
 fs.writeFileSync(path.join(out, "app_data.json"), JSON.stringify(data));
@@ -103,5 +144,6 @@ if (data.af && data.af.t) {
   }
 }
 fs.writeFileSync(path.join(out, "player_predictions.json"), JSON.stringify(ppreds));
-console.log(JSON.stringify({ week: W && W.week, made, main: W && W.main && { legs: W.main.legs.length, odds: W.main.odds, status: W.main.status },
+console.log(JSON.stringify({ week: W && W.week, made, betje: bjToday && (bjToday.none ? "geen" : { made: bjMade, odds: bjToday.odds, legs: bjToday.legs.length }),
+  main: W && W.main && { legs: W.main.legs.length, odds: W.main.odds, status: W.main.status },
   second: W && W.second && { legs: W.second.legs.length, odds: W.second.odds, status: W.second.status } }));

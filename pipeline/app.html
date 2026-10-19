@@ -175,6 +175,13 @@ button, input, select { font: inherit; color: inherit }
 .combo.super.won { border-color: var(--hit); box-shadow: inset 4px 0 0 var(--hit) }
 .combo.super.lost { border-color: var(--line); box-shadow: inset 4px 0 0 var(--bad) }
 .combo.super.lost ol { opacity: .85 }
+.why { border-top: 1px solid var(--line); padding-top: 8px; font-size: 13px }
+.why summary { cursor: pointer; font-weight: 600; color: var(--ink) }
+.why ul { margin: 6px 0 0; padding-left: 0; list-style: none; display: grid; gap: 8px }
+.why li { color: var(--muted); line-height: 1.45 }
+.why li b { color: var(--ink); font-weight: 600 }
+.bj-hist { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--muted) }
+.bj-hist span { white-space: nowrap }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 2px }
 .oddstbl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 16px; font-size: 13px; background: var(--bg); border-radius: var(--r); padding: 8px 12px }
 .oddstbl span { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); padding: 3px 0 }
@@ -1063,6 +1070,7 @@ const HIST = /*__HISTORY__*/null;
       <p><b>MLS.</b> De uitslagen van 2026 komen per speeldag van voetbalkrant.com en zijn bij het toevoegen nagekeken tegen de officiële stand (alle 30 ploegen identiek); De reeksen steunen op dit seizoen. Voor de MLS is er geen Elo en geen corners, kaarten, schoten of ruststanden, dus enkel uitslag- en goalmarkten. Play-offs zitten er niet in.</p>
       <p><b>Schoten en dubbele kans.</b> Schoten en schoten op doel per ploeg (10+, 13+, 3+ en 5+ op doel, meer schoten dan de tegenstander) volgen hetzelfde model; van alle markten houden schotreeksen het best stand. Ze komen uit dezelfde bron als corners en lopen dus even ver achter. Dubbele kans (1X, X2, 12): waar enkel 1X2-odds bekend zijn, wordt de odd daaruit afgeleid.</p>
       <p><b>Spelers.</b> Uit API-Football: per match minuten, goals, assists, schoten, schoten op doel en kaarten van elke speler, plus blessures en schorsingen. Per speler een cijfer per 90 minuten dit seizoen (de laatste matchen tellen zwaarder, en met weinig minuten wordt het naar het gemiddelde van zijn positie getrokken) × zijn verwachte speeltijd (laatste 5 matchen) × de match: de verwachte goals van zijn ploeg volgens het model voor goals en assists, en wat de tegenstander toelaat (thuis of uit) voor schoten en kaarten. De kans geldt als hij meespeelt, zoals bij de bookmaker, waar een spelersbet vervalt als de speler niet meedoet. Is er geen API-Football-data, dan valt de site terug op de topschutters van voetbalkrant (Jupiler Pro League, Champions League, Europa League; enkel scoren). Nog niet getest zoals de ploegmarkten: het trackrecord loopt sinds oktober 2026.</p>
+      <p><b>Betje van de dag.</b> Op dagen met matches met bookmakerodds maakt de update één combi van ±5x (2 tot 4 bets, één per match) uit de matches van die dag. Enkel 1X2 en over/under 2.5 met een echte odd van minstens 1,60, en enkel bets waar het model minstens 3 procentpunt meer kans ziet dan de bookmaker (zonder marge). Omdat de markt bij grote verschillen meestal gelijk heeft, telt als kans het gemiddelde van het model en de bookmaker; na dat middelen moet elke bet nog waarde hebben. Van alle combinaties van ±4x tot 7,5x wordt die met de grootste kans gekozen. Geen zulke bets, dan is er die dag geen betje. Elke bet krijgt, net als bij de superbet, een uitleg: de reeksen van beide ploegen, het competitiegemiddelde, de vorm en wat model en bookmaker denken. Waarde volgens een model is geen garantie: zie de tabel hierboven.</p>
       <p><b>Odds.</b> Voor 1X2 en over/under 2.5 toont de app bookmakerodds van football-data.co.uk (onder meer Bet365, Pinnacle en de gemiddelde en hoogste marktprijs) en van The Odds API (onder meer Unibet, Pinnacle en William Hill). Odds van Belgische bookmakers zoals Napoleon zijn niet vrij beschikbaar; de beste gevonden prijs krijg je daar dus niet altijd. De marktkans is de kans die de odds van Pinnacle (of het marktgemiddelde) impliceren na het wegnemen van de marge.</p>
       <p><b>Data.</b> Uitslagen, corners, kaarten en odds van football-data.co.uk via de open dataset Club-Football-Match-Data, Elo van ClubElo. Die dataset wordt maar een paar keer per jaar bijgewerkt. Daarom komen recente uitslagen en het speelschema elke ochtend van voetbalkrant.com. Elke update wordt eerst gecontroleerd tegen de matchen die al bekend zijn; klopt er iets niet, dan blijft die competitie op de vorige stand. Die recente uitslagen bevatten enkel goals, dus corners en kaarten lopen achter. Elo-sterkte van ClubElo tot 1 september, daarna na elke uitslag bijgewerkt met de Elo-formule (t/m ${fmtISO(DATA.eloDate)}).</p>`;
   }
@@ -1131,21 +1139,60 @@ const HIST = /*__HISTORY__*/null;
     const cls = b.status === "gewonnen" ? " won" : b.status === "verloren" ? " lost" : "";
     return `<div class="combo super${cls}"><div class="combo-head"><h3>${esc(b.name || (key === "main" ? "Superbet of the week" : "Second chance"))}</h3>
       <span class="pl-meta">week ${W.weekNo || W.week.slice(-2)} · ${fmtISO(W.from)} – ${fmtISO(W.to)} · ${n} bets · alle competities</span></div>
-      <ol>${legs}</ol><div class="combo-sum">${sum}</div><p class="note">${note}</p></div>`;
+      <ol>${legs}</ol><div class="combo-sum">${sum}</div><p class="note">${note}</p>${whyHTML(b)}</div>`;
+  }
+  // per leg: why it was chosen (written by the daily update when the bet was made)
+  function whyHTML(b) {
+    const nm = (t) => DISPLAY[t] || t, L = (b.legs || []).filter((l) => l.why);
+    if (!L.length) return "";
+    return `<details class="why" open><summary>Waarom deze bets?</summary><ul>${L.map((l) =>
+      `<li><b>${esc(nm(l.h))} – ${esc(nm(l.a))} · ${esc(l.label)}</b><br>${esc(l.why)}</li>`).join("")}</ul>
+      ${L.length < b.legs.length ? `<p class="note">Bets zonder uitleg waren al begonnen toen de uitleg werd toegevoegd.</p>` : ""}</details>`;
+  }
+  // Betje van de dag: ±5x from today's matches with real bookmaker odds, only legs with value
+  function betjeCardHTML(BJ) {
+    const lname = (d) => (DATA.divNames[d] || (DATA.cups[d] && DATA.cups[d].name) || d), nm = (t) => DISPLAY[t] || t;
+    const rec = BJ.record || { n: 0 };
+    const recTxt = rec.n ? `Tot nu toe ${rec.won} van ${rec.n} betjes gewonnen, ${rec.profit >= 0 ? "+" : "−"}${Math.abs(rec.profit).toFixed(2).replace(".", ",")} eenheden bij een inzet van 1 per betje.` : "";
+    const ST = { gewonnen: "✓", verloren: "✗", vervallen: "–", bezig: "…" };
+    const hist = (BJ.recent || []).length ? `<div class="bj-hist">${BJ.recent.map((x) => `<span>${esc(fmtISO(x.day))} ${ST[x.status] || ""} ${x.odds.toFixed(2)}x</span>`).join("")}</div>` : "";
+    const b = BJ.today;
+    if (!b || b.none) {
+      return `<div class="combo super"><div class="combo-head"><h3>Betje van de dag</h3><span class="pl-meta">${b ? esc(fmtISO(b.day)) : ""}</span></div>
+        <p class="note">Vandaag geen betje${b && b.note ? `: ${esc(b.note)}` : ""}. Er komt er alleen een als er matches zijn met een mooie odd waar het model duidelijk meer kans ziet dan de bookmaker.</p>${recTxt ? `<p class="note">${recTxt}</p>` : ""}${hist}</div>`;
+    }
+    const icon = (l) => (l.hit === 1 ? `<span class="leg-st ok" title="gewonnen">✓</span>` : l.hit === 0 ? `<span class="leg-st ko" title="verloren">✗</span>`
+      : l.hit === "void" ? `<span class="leg-st vd" title="vervallen (geen uitslag)">–</span>` : `<span class="leg-st op" title="nog te spelen"></span>`);
+    const legs = b.legs.map((l) => `<li>${icon(l)}<span><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""} · ${pct(l.pb)} · ${esc(l.bk)} ${l.odd.toFixed(2)}</small></span></li>`).join("");
+    const n = b.legs.length, hit = b.legs.filter((l) => l.hit === 1).length, open = b.legs.filter((l) => l.hit == null).length;
+    const st = b.status === "gewonnen" ? `<span class="sb-status won">Gewonnen! ${hit} van ${n} binnen</span>`
+      : b.status === "verloren" ? `<span class="sb-status lost">Verloren${b.lost_on ? ` bij ${esc(b.lost_on)}` : ""}</span>`
+      : b.status === "vervallen" ? `<span class="sb-status">Vervallen: geen enkele match gespeeld</span>`
+      : `<span class="sb-status">${hit ? `${hit} van ${n} al binnen, ` : ""}nog ${open} te spelen</span>`;
+    const ev = Math.round((b.p * b.odds - 1) * 100);
+    const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
+    const sum = `<span>${st}</span><span>Combi-odd <b>${b.odds.toFixed(2)}</b></span><span>Kans <b>${(b.p * 100).toFixed(0)}%</b> (1 op ${Math.round(1 / b.p)})</span><span>Verwachte opbrengst <b>${ev >= 0 ? "+" : "−"}${Math.abs(ev)}%</b></span>${canAdd ? `<button class="go" data-sb="betje">Zet in combi</button>` : ""}`;
+    const cls = b.status === "gewonnen" ? " won" : b.status === "verloren" ? " lost" : "";
+    const note = `Elke dag één keer gemaakt uit de matches van die dag met een echte bookmakerodd (1X2 en over/under 2.5), van 2 tot 4 bets en ±${b.target}x. Er gaan enkel bets in met een odd van minstens 1,60 waar het model meer kans ziet dan de bookmaker. De kans hierboven is het gemiddelde van het model en de bookmaker (zonder marge): waar ze sterk verschillen, heeft de markt meestal gelijk. Ook met waarde blijft het een gok: hou de inzet klein.`;
+    return `<div class="combo super${cls}"><div class="combo-head"><h3>Betje van de dag</h3>
+      <span class="pl-meta">${esc(fmtISO(b.day))} · ${n} bets · ±${b.target}x</span></div>
+      <ol>${legs}</ol><div class="combo-sum">${sum}</div><p class="note">${note}${recTxt ? ` ${recTxt}` : ""}</p>${hist}${whyHTML(b)}</div>`;
   }
   function renderSuper() {
-    const W = DATA.superbetWeek, wrap = $("superWrap");
-    if (!W || !W.main || !W.main.legs || W.main.legs.length < 2) { wrap.innerHTML = ""; return; }
+    const W = DATA.superbetWeek, wrap = $("superWrap"), BJ = DATA.betje;
     const cards = [];
-    if (W.second) cards.push(superCardHTML(W.second, "second", W));
-    cards.push(superCardHTML(W.main, "main", W));
-    if (!W.second && W.main.status === "verloren" && W.secondNote) cards.push(`<p class="note">Geen second chance: ${esc(W.secondNote.replace(/^\S+: /, ""))}.</p>`);
+    if (BJ) cards.push(betjeCardHTML(BJ));
+    if (W && W.main && W.main.legs && W.main.legs.length >= 2) {
+      if (W.second) cards.push(superCardHTML(W.second, "second", W));
+      cards.push(superCardHTML(W.main, "main", W));
+      if (!W.second && W.main.status === "verloren" && W.secondNote) cards.push(`<p class="note">Geen second chance: ${esc(W.secondNote.replace(/^\S+: /, ""))}.</p>`);
+    }
     wrap.innerHTML = cards.join("");
     wrap.querySelectorAll("button[data-sb]").forEach((btn) => btn.addEventListener("click", () => {
-      const b = W[btn.dataset.sb], nm = (t) => DISPLAY[t] || t;
+      const key = btn.dataset.sb, b = key === "betje" ? BJ.today : W[key], nm = (t) => DISPLAY[t] || t;
       for (const l of b.legs) {
         const k = `${l.mkey}|${l.id}`;
-        if (!state.slip.some((x) => x.k === k)) state.slip.push({ k, match: l.mkey, label: `${nm(l.h)} – ${nm(l.a)}: ${l.label}`, p: l.p });
+        if (!state.slip.some((x) => x.k === k)) state.slip.push({ k, match: l.mkey, label: `${nm(l.h)} – ${nm(l.a)}: ${l.label}`, p: l.pb ?? l.p });
       }
       store.set("slip", state.slip); renderSlip(); renderBest();
     }));

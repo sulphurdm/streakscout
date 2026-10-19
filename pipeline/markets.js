@@ -216,7 +216,133 @@
       allPriced: legs.length > 0 && legs.every((l) => l.bk), reached: bestN > 0, legs };
   }
 
-  const api = { DISPLAY, MK, ODDS_IDX, reliability, fixtureOdds, marketFor, analyseFixture, betsFor, superbet };
+  /**
+   * Betje van de dag: a combi of about 5x from today's matches, only from bets with a real bookmaker odd
+   * (1X2 and over/under 2.5, not derived) where the model sees more chance than the bookmakers.
+   * The chance used is the average of the model and the bookmakers' margin-free chance: where the model
+   * disagrees a lot with the market (often underdogs), the market is usually right, so only half of the
+   * difference counts. A leg needs value after that averaging. Of all combinations of 2 to 4 legs
+   * (one per match) between lo and hi total odds, the one with the highest chance is chosen.
+   */
+  const BETJE_MK = new Set(["win@H", "draw", "win@A", "o25", "u25"]);
+  function betje(eng, DATA, HIST, o) {
+    const lo = o.lo || 4.2, hi = o.hi || 7.5, target = o.target || 5, maxLegs = o.maxLegs || 4;
+    const minOdd = o.minOdd || 1.6, maxOdd = o.maxOdd || 3.3, minP = o.minP || 0.4, minEdge = o.minEdge ?? 0.02;
+    const tix = new Map(DATA.teams.map((t, i) => [t, i]));
+    const skip = new Set(o.skipDivs || []);
+    let priced = 0;
+    const byMatch = [];
+    for (const f of DATA.fixtures) {
+      if (f.when.slice(0, 10) !== o.day || (o.after && f.when <= o.after) || skip.has(f.div)) continue;
+      const H = tix.get(f.h), A = tix.get(f.a);
+      if (H == null || A == null) continue;
+      const bs = betsFor(eng, DATA, HIST, H, A, f.div, o.day);
+      if (bs.some((b) => b.market)) priced++;
+      const opts = [];
+      for (const b of bs) {
+        if (!BETJE_MK.has(b.id) || !b.market || b.market.derived) continue;
+        const odd = b.market.best.o, pm = b.market.pMkt, pb = (b.p + pm) / 2, edge = pb * odd - 1;
+        if (odd < minOdd || odd > maxOdd || b.p < minP || b.p < pm + 0.03 || edge < minEdge) continue;
+        opts.push({ f, b, odd, pm, pb, edge });
+      }
+      if (opts.length) byMatch.push(opts.sort((x, y) => y.edge - x.edge).slice(0, 2));
+    }
+    const pool = byMatch.sort((x, y) => y[0].pb - x[0].pb).slice(0, 14);
+    let best = null;
+    const walk = (j, picked, odds, p) => {
+      if (picked.length >= 2 && odds >= lo && odds <= hi) {
+        const better = !best || p > best.p + 1e-9 || (Math.abs(p - best.p) <= 1e-9 && Math.abs(odds - target) < Math.abs(best.odds - target));
+        if (better) best = { picked: picked.slice(), odds, p };
+      }
+      if (picked.length >= maxLegs || odds > hi) return;
+      for (let k = j; k < pool.length; k++) {
+        for (const op of pool[k]) {
+          picked.push(op);
+          walk(k + 1, picked, odds * op.odd, p * op.pb);
+          picked.pop();
+        }
+      }
+    };
+    walk(0, [], 1, 1);
+    const out = { day: o.day, target, lo, hi, candidates: pool.reduce((s, x) => s + x.length, 0), priced };
+    if (!best) {
+      out.legs = [];
+      out.note = !priced ? "vandaag zijn er geen bookmakerodds voor de matches die nog moeten beginnen"
+        : out.candidates < 2 ? `van de ${priced} matches met bookmakerodds ${out.candidates ? "had er maar één een bet" : "had geen enkele een bet"} met een odd van ${minOdd.toFixed(2)} of meer waar het model duidelijk meer kans ziet dan de bookmaker`
+        : `met de ${out.candidates} bets met waarde kwam geen combi tussen ${lo}x en ${hi}x uit`;
+      return out;
+    }
+    best.picked.sort((x, y) => (x.f.when < y.f.when ? -1 : x.f.when > y.f.when ? 1 : 0));
+    out.legs = best.picked.map(({ f, b, odd, pm, pb, edge }) => ({
+      div: f.div, when: f.when, h: f.h, a: f.a, id: b.id, label: b.label, p: Math.round(b.p * 1000) / 1000,
+      pm: Math.round(pm * 1000) / 1000, pb: Math.round(pb * 1000) / 1000, base: Math.round(b.base * 1000) / 1000,
+      sig: b.rel.lvl, odd: Math.round(odd * 100) / 100, bk: b.market.best.bk, derived: false, mkey: b.mkey,
+      edge: Math.round(edge * 1000) / 1000 }));
+    out.odds = Math.round(out.legs.reduce((a, l) => a * l.odd, 1) * 100) / 100;
+    out.p = best.p;
+    out.pModel = best.picked.reduce((a, x) => a * x.b.p, 1);
+    out.allPriced = true;
+    return out;
+  }
+
+  /** one line on why a leg was chosen: its streaks, the competition average, the model and the bookmaker */
+  const SIG = { 3: "sterk", 2: "matig", 1: "zwak" };
+  const pc = (x) => `${Math.round(x * 100)}%`;
+  function formOf(eng, DATA, t, n) {
+    const m = DATA.m, s = [];
+    for (const i of (eng.teamMatches.get(t) || []).slice(-n)) {
+      const home = m.h[i] === t, gf = home ? m.fh[i] : m.fa[i], ga = home ? m.fa[i] : m.fh[i];
+      if (gf == null || ga == null || gf < 0 || ga < 0) continue;
+      s.push(gf > ga ? "W" : gf === ga ? "G" : "V");
+    }
+    return s.join("");
+  }
+  function explainLeg(eng, DATA, HIST, l, today) {
+    const tix = new Map(DATA.teams.map((t, i) => [t, i]));
+    const H = tix.get(l.h), A = tix.get(l.a), mk = MK.find((x) => x.id === l.id);
+    if (H == null || A == null || !mk) return null;
+    const an = analyseFixture(eng, DATA, H, A, l.div);
+    const src = an && an.r[mk.src || mk.id];
+    if (!src || !Number.isFinite(src.p)) return null;
+    const fl = !!mk.flip, f = src.f, nm = (i) => DISPLAY[DATA.teams[i]] || DATA.teams[i];
+    const kn = (r) => (r && r.n ? `${fl ? r.n - r.k : r.k}/${r.n}` : null);
+    const withVen = (main, ven, w) => (kn(ven) ? `${kn(main)} (${w} ${kn(ven)})` : kn(main));
+    const parts = [];
+    let streaks;
+    if (src.kind === "match") {
+      if (kn(f.H)) parts.push(`${nm(H)} ${withVen(f.H, f.Hv, "thuis")}`);
+      if (kn(f.A)) parts.push(`${nm(A)} ${withVen(f.A, f.Av, "uit")}`);
+      streaks = [[H, f.Hst], [A, f.Ast]];
+    } else {
+      const T = src.team, O = src.opp;
+      if (kn(f.T)) parts.push(`${nm(T)} ${withVen(f.T, f.Tv, src.home ? "thuis" : "uit")}`);
+      if (kn(f.O)) parts.push(`tegen ${nm(O)} ${withVen(f.O, f.Ov, src.home ? "uit" : "thuis")}`);
+      streaks = [[T, f.Tst]];
+    }
+    if (f.h2h && f.h2h.n >= 2) parts.push(`onderling ${kn(f.h2h)}`);
+    const run = streaks.map(([t, s]) => [t, fl ? -s : s]).filter(([, s]) => s >= 3).map(([t, s]) => `${nm(t)} ${s} keer op rij`);
+    const base = fl ? 1 - src.base : src.base;
+    let s = parts.length ? `Laatste matchen: ${parts.join(", ")}${run.length ? `; ${run.join(", ")}` : ""}. Competitiegemiddelde ${pc(base)}.` : `Competitiegemiddelde ${pc(base)}.`;
+    if (mk.g === "res") {
+      const fh = formOf(eng, DATA, H, 5), fa = formOf(eng, DATA, A, 5);
+      if (fh || fa) s += ` Vorm (laatste 5, recentste rechts): ${nm(H)} ${fh || "–"}, ${nm(A)} ${fa || "–"}.`;
+    }
+    const lvl = reliability(HIST, src.ev, fl).lvl, p = fl ? 1 - src.p : src.p;
+    const mkt = l.bk ? marketFor(l.id, fixtureOdds(DATA, DATA.teams[H], DATA.teams[A], today)) : null;
+    const pm = l.pm ?? (mkt ? mkt.pMkt : null), pModel = l.p ?? p;
+    s += ` Model ${pc(pModel)} (signaal ${SIG[lvl] || "zwak"})`;
+    if (l.bk) {
+      s += ` · ${l.bk} ${Number(l.odd).toFixed(2)}${l.derived ? " (afgeleid uit 1X2)" : ""}`;
+      if (pm != null) {
+        const d = Math.round((pModel - pm) * 100);
+        s += `, de bookmakers schatten ${pc(pm)}${d >= 3 ? `: het model ziet ${d} procentpunt meer kans` : d <= -3 ? `: het model ziet ${-d} procentpunt minder kans` : ""}`;
+      }
+      s += ".";
+    } else s += ` · geen bookmakerodd gevonden, odd geschat op ±${Number(l.odd).toFixed(2)}.`;
+    return s;
+  }
+
+  const api = { DISPLAY, MK, ODDS_IDX, reliability, fixtureOdds, marketFor, analyseFixture, betsFor, superbet, betje, explainLeg };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SSMarkets = api;
 })(typeof window !== "undefined" ? window : globalThis);

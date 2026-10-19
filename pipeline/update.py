@@ -649,9 +649,28 @@ def main():
         import weekly
         idx = track.results_index(pd.concat([rec, cup_res], ignore_index=True) if len(cup_res) else rec, fd_all if len(fd_all) else None)
         weekly.run(state, today, idx)
+        weekly.run_betje(state, today, idx)
     except Exception as e:  # noqa: BLE001
         report["superbet_week_error"] = f"{type(e).__name__}: {e}"
-    run("node", str(HERE / "superbet_cli.js"), str(out), str(today), str(sbp), str(wkp), now_s)
+    bjp = state / "betje.json"
+    run("node", str(HERE / "superbet_cli.js"), str(out), str(today), str(sbp), str(wkp), now_s, str(bjp))
+    try:  # betje van de dag: today's (or why there is none) and how yesterday's went
+        B = json.load(open(bjp)) if bjp.exists() else []
+        cur = next((b for b in B if b.get("day") == str(today)), None)
+        prev = [b for b in B if b.get("day", "") < str(today) and not b.get("none")]
+        bl = lambda x: f"{x['when']} {x['h']}-{x['a']}: {x['label']} ({x['bk']} {x['odd']})" + ({1: " ✓", 0: " ✗", "void": " vervallen"}.get(x.get("hit"), ""))  # noqa: E731
+        report["betje"] = ({"today": None} if not cur else
+                           {"today": "geen", "reason": cur.get("note")} if cur.get("none") else
+                           {"today": "ja", "odds": cur["odds"], "p": round(cur["p"], 4), "status": cur["status"],
+                            "bets": [bl(x) for x in cur["legs"]], "why": [x.get("why") for x in cur["legs"]]})
+        if prev:
+            y = prev[-1]
+            report["betje"]["previous"] = {"day": y["day"], "odds": y["odds"], "status": y["status"],
+                                           "legs_hit": y.get("legs_hit"), "legs": len(y["legs"]), "bets": [bl(x) for x in y["legs"]]}
+        import weekly
+        report["betje"]["record"] = weekly.betje_summary(state)
+    except Exception as e:  # noqa: BLE001
+        report["betje"] = {"error": f"{type(e).__name__}: {e}"}
     sb = json.load(open(sbp))
     W = json.load(open(wkp)) if wkp.exists() else None
     leg = lambda x: f"{x['when']} {x['h']}-{x['a']}: {x['label']} ({x['odd']})" + ({1: " ✓", 0: " ✗", "void": " vervallen"}.get(x.get("hit"), ""))  # noqa: E731
@@ -669,7 +688,7 @@ def main():
     try:  # track record (predictions vs results); never blocks the update
         import track
         tr = track.run(root, today, out)
-        report["track"] = {k: tr.get(k) for k in ("settled", "open", "all", "superbet_week", "players")}
+        report["track"] = {k: tr.get(k) for k in ("settled", "open", "all", "superbet_week", "betje", "players")}
     except Exception as e:  # noqa: BLE001
         report["track"] = {"error": str(e)}
     run(sys.executable, "-I", str(HERE / "build.py"), str(out), str(root / "dist" / "streakscout.html"))

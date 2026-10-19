@@ -5,6 +5,8 @@ state/superbet_week.json  the current week: {"week", "from", "to", "main": {...}
                           second = "Second chance" (made once when main is lost and enough matches remain)
 state/superbet_weeks.json finished weeks (newest last), for the track record
 
+state/betje.json          the daily "Betje van de dag" (±5x, value legs only), newest last; days without one have "none"
+
 A leg gets "hit": 1 (won), 0 (lost) or "void" (no result 3 days after the match, e.g. postponed),
 plus "score". Status per bet: "bezig", "gewonnen" or "verloren". New bets are made in superbet_cli.js.
 """
@@ -74,6 +76,37 @@ def run(state, today, idx):
     elif wp.exists():
         wp.unlink()
     return W
+
+
+def run_betje(state, today, idx):
+    """Settle the legs of the daily betjes (state/betje.json, newest last; made in superbet_cli.js)."""
+    p = Path(state) / "betje.json"
+    if not p.exists():
+        return []
+    B = json.load(open(p))
+    for b in B:
+        if not b.get("none") and b.get("status") in (None, "bezig"):
+            settle_bet(b, idx, today)
+    json.dump(B, open(p, "w"), ensure_ascii=False, indent=1)
+    return B
+
+
+def betje_summary(state):
+    p = Path(state) / "betje.json"
+    B = json.load(open(p)) if p.exists() else []
+    bets = [b for b in B if not b.get("none")]
+    done = [b for b in bets if b.get("status") in ("gewonnen", "verloren")]
+
+    def eff(b):
+        o = 1.0
+        for leg in b["legs"]:
+            if leg.get("hit") != "void":
+                o *= leg["odd"]
+        return o
+    profit = sum(eff(b) - 1 if b["status"] == "gewonnen" else -1 for b in done)
+    return {"days": len(B), "made": len(bets), "settled": len(done), "won": sum(1 for b in done if b["status"] == "gewonnen"),
+            "profit_units": round(profit, 2), "legs_hit": sum(b.get("legs_hit", 0) for b in done),
+            "legs": sum(len(b["legs"]) for b in done)}
 
 
 def summary(state):

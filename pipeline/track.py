@@ -174,6 +174,7 @@ def run(root, today, out_dir):
     try:
         import weekly
         summary["superbet_week"] = weekly.summary(state)
+        summary["betje"] = weekly.betje_summary(state)
     except Exception as e:  # noqa: BLE001
         summary["superbet_week"] = {"error": str(e)}
     summary["superbet"] = {"days_settled": len(done), "won": sum(1 for x in done if x["won"]),

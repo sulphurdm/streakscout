@@ -1802,6 +1802,7 @@ const HIST = {"reality":{"o15":{"label":"Meer dan 1.5 goals","overall":0.7427,"b
   };
   // BTTS-optie per leg: "beide teams scoren" (yes or no) in the same match, with a button to add it to the combi
   function bttsLine(l, b) {
+    return "";
     const o = l.bttsOpt;
     if (!o || l.hit != null || b.status !== "bezig" || l.when <= nowLocal()) return "";
     const r = (DATA.research || {})[rkey(l)], m = r && Array.isArray(r.markets) ? r.markets.find((x) => x.id === o.id) : null;

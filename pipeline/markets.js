@@ -153,8 +153,9 @@
       const all = betsFor(eng, DATA, HIST, H, A, f.div, o.from);
       const opts = [];
       for (const b of all) {
-        // BTTS (yes/no) is allowed at any signal level: its streaks are weak, but it is a popular leg for a combi
-        const lvlOk = b.rel.lvl >= (o.minLvl ?? 2) || ((b.id === "btts" || b.id === "bttsno") && o.btts !== false);
+        // BTTS (beide teams scoren ja/nee) is an ordinary option: streaks in that market are weak (signal level 1),
+        // so it is allowed at any signal level, with the same minimum chance as every other leg
+        const lvlOk = b.rel.lvl >= (o.minLvl ?? 2) || b.id === "btts" || b.id === "bttsno";
         if ((o.ids && !o.ids.has(b.id)) || b.p < minP || !lvlOk) continue;
         if (NEEDS_STATS(b) && !fresh(f.div)) continue; // stale statistics: skip
         const odd = legOdd(b);

@@ -230,6 +230,9 @@ def bets_report(state, out, today, report):
             report["betje"]["previous"] = {"day": y["day"], "odds": y["odds"], "status": y["status"],
                                            "legs_hit": y.get("legs_hit"), "legs": len(y["legs"]), "bets": [_leg_txt(x) for x in y["legs"]],
                                            "btts": _bet_txt(y.get("btts"))}
+        pb = [b["btts"] for b in B if b.get("day", "") < str(today) and b.get("btts") and not b["btts"].get("none")]
+        if pb:
+            report["betje"]["previous_btts"] = _bet_txt(pb[-1])
         import weekly
         report["betje"]["record"] = weekly.betje_summary(state)
     except Exception as e:  # noqa: BLE001

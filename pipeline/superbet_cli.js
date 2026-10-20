@@ -4,8 +4,7 @@
 // is made once. Both are shown on the page (data.superbetWeek); state/superbet.json holds the bet that is still running.
 // Betje van de dag: a combi of about 5x from today's matches with real bookmaker odds where the model sees value
 // (markets.js betje); made once a day (a day without one is tried again at a later update that day), settled in weekly.py.
-// Every leg of these bets also gets "bttsOpt": the BTTS bet (yes or no) of its match, to add to a combi; BTTS bets can
-// also be legs themselves (in the superbet when p >= 62%, in the betje when Claude picks them after the deep dive).
+// BTTS (beide teams scoren ja/nee) is an ordinary market: it can be a leg of the superbet (markets.js) and of the betje.
 // Every leg gets "why": one line on why the model likes it (streaks, average, model and bookmaker).
 //
 // Deep dive (the daily scheduled task): this script writes state/dossier.json with the matches to research (today's
@@ -50,20 +49,12 @@ const make = (target, maxLegs, exclude) => M.superbet(eng, data, hist,
 const stamp = (b, name) => Object.assign(b, { name, made: now, status: "bezig", legs_hit: 0, skipped: failed,
   legs: b.legs.map((l) => Object.assign(l, { hit: null })) });
 // explanation per leg, written when the bet is made (or later for legs that have not been played yet)
-const bttsFor = (l) => {
-  const H = tix.get(l.h), A = tix.get(l.a);
-  if (H == null || A == null || BTTS.has(l.id)) return null;
-  const c = M.betsFor(eng, data, hist, H, A, l.div, today).filter((x) => BTTS.has(x.id)).sort((x, y) => y.p - x.p)[0];
-  return c ? { id: c.id, label: c.label, p: Math.round(c.p * 1000) / 1000, odd: Math.round((0.95 / c.p) * 100) / 100, sig: c.rel.lvl } : null;
-};
 const explain = (b) => {
   for (const l of (b && b.legs) || []) {
-    if (l.hit != null || l.when <= now) continue;
-    // BTTS-optie: "beide teams scoren" (yes or no) in the same match, to add to a combi
-    if (!l.bttsOpt) { try { const o = bttsFor(l); if (o) l.bttsOpt = o; } catch (e) { /* none */ } }
-    if (l.why) continue;
+    if (l.why || l.hit != null || l.when <= now) continue;
     try { const w = M.explainLeg(eng, data, hist, l, today); if (w) l.why = w; } catch (e) { /* no explanation */ }
   }
+  if (b && b.btts) explain(b.btts);
 };
 
 let made = null;
@@ -188,14 +179,14 @@ function writeDossier() {
     // research order: 1 legs of today's betje and its BTTS-optie, 2 weekly legs played today or tomorrow,
     // 3 other candidates for today's betje, 4 weekly legs later this week (only when that bet was made today)
     const r = d.roles.join(" | "), soon = f.when.slice(0, 10) <= tomorrow;
-    d.priority = /^betje van de dag|BTTS-optie van het betje/m.test(d.roles.join("\n")) ? 1
+    d.priority = /^betje van de dag/m.test(d.roles.join("\n")) ? 1
       : (soon && /superbet|second chance/.test(r)) ? 2 : /kandidaat/.test(r) ? 3 : 4;
     matches.push(d);
   }
   matches.sort((x, y) => x.priority - y.priority || (x.when < y.when ? -1 : 1));
   const weekMadeToday = !!(W && W.main && (W.main.made || "").startsWith(today));
   fs.writeFileSync(path.join(stateDir, "dossier.json"), JSON.stringify({ today, now, rules: {
-    betje: "2 tot 4 bets uit de matches van vandaag (rol 'kandidaat betje van de dag'), één per match, elke markt mag (uitslag, goals, BTTS ja/nee, corners, kaarten, schoten); samen 4 tot 7,5x (mik op ±5x); enkel bets die je na je onderzoek 'sterk' of 'ok' vindt",
+    betje: "2 tot 4 bets uit de matches van vandaag (rol 'kandidaat betje van de dag'), één per match, elke markt mag (uitslag, dubbele kans, goals, BTTS ja/nee, corners, kaarten, schoten); samen 4 tot 7,5x (mik op ±5x); enkel bets die je na je onderzoek 'sterk' of 'ok' vindt",
     week: weekMadeToday ? "de superbet van de week is vandaag gemaakt: je mag hem nog aanpassen (2 tot 14 bets uit alle matches van deze week in het dossier, elke markt mag, ook BTTS; samen 15 tot 30x); daarna verandert hij niet meer" : "de weekbets liggen vast: enkel onderzoeken en beoordelen",
     current: { betje: bjToday && !bjToday.none ? bjToday.legs.map((l) => ({ key: keyOf(l), id: l.id })) : [],
     },
@@ -319,6 +310,7 @@ data.betje = {
     .map((x) => ({ day: x.day, odds: x.odds, status: x.status, legs_hit: x.legs_hit, legs: x.legs.length })),
   record: { n: done.length, won: won.length, profit: Math.round(done.reduce((s, x) => s + (x.status === "gewonnen" ? effOdds(x) - 1 : -1), 0) * 100) / 100 },
 };
+
 
 data.superbetWeek = W;
 delete data.superbet;

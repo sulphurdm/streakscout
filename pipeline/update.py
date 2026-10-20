@@ -225,6 +225,13 @@ def bets_report(state, out, today, report):
                            dict({"today": "ja"}, **_bet_txt(cur)))
         if cur:
             report["betje"]["btts"] = _bet_txt(cur.get("btts"))
+            if cur.get("cl") is not None:
+                report["betje"]["cl"] = [_bet_txt(c) for c in cur["cl"]]
+                if cur.get("cl_note"):
+                    report["betje"]["cl_note"] = cur["cl_note"]
+        pcl = [c for b in B if b.get("day", "") < str(today) for c in (b.get("cl") or [])]
+        if pcl:
+            report["betje"]["previous_cl"] = [_bet_txt(c) for c in pcl[-4:]]
         if prev:
             y = prev[-1]
             report["betje"]["previous"] = {"day": y["day"], "odds": y["odds"], "status": y["status"],

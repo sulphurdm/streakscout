@@ -147,7 +147,7 @@
     const skip = new Set(o.skipDivs || []);
     for (const f of DATA.fixtures) {
       const d = f.when.slice(0, 10);
-      if (d < o.from || d > o.to || skip.has(f.div) || (o.after && f.when <= o.after) || (o.exclude && o.exclude.has(f.h + "|" + f.a))) continue;
+      if (d < o.from || d > o.to || skip.has(f.div) || (o.onlyDivs && !o.onlyDivs.has(f.div)) || (o.after && f.when <= o.after) || (o.exclude && o.exclude.has(f.h + "|" + f.a))) continue;
       const H = tix.get(f.h), A = tix.get(f.a);
       if (H == null || A == null) continue;
       const all = betsFor(eng, DATA, HIST, H, A, f.div, o.from);

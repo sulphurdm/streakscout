@@ -63,6 +63,22 @@ const explain = (b) => {
 const CL_IDS = new Set(["win@H", "win@A", "draw", "nolose@H", "nolose@A", "12", "o15", "o25", "u25", "o35", "u35",
   "btts", "bttsno", "sc1@H", "sc1@A", "sc2@H", "sc2@A", "cs@H", "cs@A"]);
 const clToday = () => data.fixtures.filter((f) => f.div === "CL" && f.when.slice(0, 10) === today && f.when > now);
+// Spread rule for the CL night: the same bet, or one that comes down to the same thing, is never in every combi
+// (if it fails, they all fail; on 20/10 all three lost on Porto). A match may be in several combis with a different bet.
+// Per match: H = needs the home team to score or not to lose, A = the same for the away team, G+ = goals, G- = few goals.
+const CORE = { "win@H": ["H"], "nolose@H": ["H"], "sc1@H": ["H"], "sc2@H": ["H"], "win@A": ["A"], "nolose@A": ["A"], "sc1@A": ["A"],
+  "sc2@A": ["A"], btts: ["H", "A", "G+"], o15: ["G+"], o25: ["G+"], o35: ["G+"], u25: ["G-"], u35: ["G-"], bttsno: ["G-"],
+  "cs@H": ["G-"], "cs@A": ["G-"] };
+const CORE_TXT = { H: "de thuisploeg moet scoren of niet verliezen", A: "de uitploeg moet scoren of niet verliezen", "G+": "er moeten goals vallen", "G-": "er mogen weinig goals vallen" };
+function sharedCore(bets) {
+  if (bets.length < 2) return null;
+  const sets = bets.map((b) => new Set(b.legs.flatMap((l) => (CORE[l.id] || [l.id]).map((t) => (l.mkey || l.h + "|" + l.a) + "|" + t))));
+  for (const t of sets[0]) if (sets.every((s) => s.has(t))) {
+    const [h, a, tag] = t.split("|");
+    return `${h}-${a} zit in alle ${bets.length} CL-betjes met een bet die op hetzelfde neerkomt (${CORE_TXT[tag] || tag}); als die misloopt, verliezen ze allemaal`;
+  }
+  return null;
+}
 function clNight() {
   if (clToday().length < 2) return null;
   const mk = (target, maxLegs, exclude) => M.superbet(eng, data, hist, { from: today, to: today, after: now, target, maxLegs, minP: 0.6,
@@ -73,8 +89,9 @@ function clNight() {
   const used = new Set(out.flatMap((b) => b.legs.map((l) => l.h + "|" + l.a)));
   const b = mk(5, 6, used);
   if (b.reached && b.legs.length >= 2) out.push(stamp(b, "CL-avond betje 2"));
-  const c = mk(10, 8);
-  if (c.reached && c.legs.length >= 2 && !out.some((x) => x.odds === c.odds && x.legs.length === c.legs.length)) out.push(stamp(c, "CL-avond knaller"));
+  // betje 1 and 2 share no match, so the knaller can use any match; with only one other combi it stays apart from it
+  const c = mk(10, 8, out.length === 1 ? used : undefined);
+  if (c.reached && c.legs.length >= 2 && !out.some((x) => x.odds === c.odds && x.legs.length === c.legs.length) && !sharedCore([...out, c])) out.push(stamp(c, "CL-avond knaller"));
   for (const x of out) { x.chosen_by = "model"; x.target = x.target || 5; }
   return out;
 }
@@ -218,7 +235,7 @@ function writeDossier() {
   const weekMadeToday = !!(W && W.main && (W.main.made || "").startsWith(today));
   fs.writeFileSync(path.join(stateDir, "dossier.json"), JSON.stringify({ today, now, rules: {
     betje: "2 tot 4 bets uit de matches van vandaag (rol 'kandidaat betje van de dag'), één per match, elke markt mag (uitslag, dubbele kans, goals, BTTS ja/nee, corners, kaarten, schoten); samen 4 tot 7,5x (mik op ±5x); enkel bets die je na je onderzoek 'sterk' of 'ok' vindt",
-    cl: "Champions League-avond (enkel als er vandaag CL-matchen zijn): 1 tot 4 combi's uit de CL-matchen van vandaag (rol 'kandidaat CL-avond'), elk 2 tot 6 bets, één per match, samen minstens 5x (hoogstens 40x), enkel markten die op de eindstand afgerekend worden (uitslag, dubbele kans, goals, BTTS, scoren, nul houden), enkel bets die je 'sterk' of 'ok' vindt; de odds zijn geschat",
+    cl: "Champions League-avond (enkel als er vandaag CL-matchen zijn): 1 tot 4 combi's uit de CL-matchen van vandaag (rol 'kandidaat CL-avond'), elk 2 tot 6 bets, één per match, samen minstens 5x (hoogstens 40x), enkel markten die op de eindstand afgerekend worden (uitslag, dubbele kans, goals, BTTS, scoren, nul houden), enkel bets die je 'sterk' of 'ok' vindt; de odds zijn geschat. Spreiden: dezelfde bet, of een bet die op hetzelfde neerkomt (bv. 'Porto wint of gelijk' en 'Porto scoort': allebei moet Porto het goed doen; BTTS telt voor beide ploegen en voor goals), staat nooit in alle combi's tegelijk; een match mag wel in meerdere combi's met een andere bet. Ook als het onderzoek beperkt is: maak de combi's toch, met de beste info die je hebt",
     week: weekMadeToday ? "de superbet van de week is vandaag gemaakt: je mag hem nog aanpassen (2 tot 14 bets uit alle matches van deze week in het dossier, elke markt mag, ook BTTS; samen 15 tot 30x); daarna verandert hij niet meer" : "de weekbets liggen vast: enkel onderzoeken en beoordelen",
     current: { betje: bjToday && !bjToday.none ? bjToday.legs.map((l) => ({ key: keyOf(l), id: l.id })) : [],
       cl: ((bjToday && bjToday.cl) || []).map((c) => ({ name: c.name, odds: c.odds, legs: c.legs.map((l) => ({ key: keyOf(l), id: l.id })) })),
@@ -315,6 +332,8 @@ if (FINAL) {
         if (b && b.legs.every((l) => l.div === "CL")) got.push(Object.assign({ name: String(cb.name || `CL-avond betje ${i + 1}`).slice(0, 60), target: 5, made: now, decided: now, status: "bezig", legs_hit: 0 }, b));
         else errs.push(`${cb.name || i + 1}: ${err || "enkel Champions League-matchen"}`);
       });
+      const shared = got.length && !errs.length ? sharedCore(got) : null;
+      if (shared) errs.push(shared);
       if (got.length && !errs.length) { bjToday.cl = got; bjToday.cl_note = choice.cl.reason ? String(choice.cl.reason).slice(0, 800) : undefined; fin.choice.cl = `gebruikt (${got.length})`; }
       else fin.choice.cl = `niet gebruikt: ${errs.join("; ")}`;
     }

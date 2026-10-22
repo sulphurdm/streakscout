@@ -207,7 +207,7 @@ def collect(state):
                 add(g, f"{w.get('week')}|{k}", (b.get("made") or w.get("from") or "")[:10], b)
     for d in _load(state / "superbet_history.json", []):  # the old daily superbet (before the weekly one)
         if d.get("settled"):
-            b = dict(d, status="gewonnen" if d.get("won") else "verloren", name="Superbet van de dag")
+            b = dict(d, status="gewonnen" if d.get("won") else "verloren", name=d.get("name") or "Superbet van de dag")
             add("daily", f"{d['made']}|daily", d["made"], b)
     # dedupe (a week can be in the archive and the current file)
     seen, res = set(), []

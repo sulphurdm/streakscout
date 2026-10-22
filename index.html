@@ -313,8 +313,16 @@ footer a { color: inherit }
 .tts span.on { opacity: 1; transform: scale(1); transition: transform .12s cubic-bezier(.3,1.8,.5,1), opacity .08s }
 .tts span.sahur { flex-basis: 100%; text-align: center; color: var(--accent) }
 .tts.shake div { animation: ttsShake .12s 3 }
+.tts-walk { position: fixed; left: 0; bottom: 14vh; width: 84px; z-index: 100; pointer-events: none; animation: ttsWalk 3.1s linear forwards }
+.tts-walk .body { animation: ttsBob .26s ease-in-out infinite alternate }
+.tts-walk .leg { transform-box: view-box; animation: ttsLeg .26s ease-in-out infinite alternate }
+.tts-walk .leg.l { transform-origin: 30px 72px } .tts-walk .leg.r { transform-origin: 54px 72px }
+.tts-walk .leg.r { animation-direction: alternate-reverse }
+@keyframes ttsWalk { from { transform: translateX(-110px) } to { transform: translateX(calc(100vw + 20px)) } }
+@keyframes ttsBob { from { transform: translateY(0) } to { transform: translateY(-4px) } }
+@keyframes ttsLeg { from { transform: rotate(-22deg) } to { transform: rotate(22deg) } }
 @keyframes ttsShake { 0%, 100% { transform: translateX(0) } 25% { transform: translateX(-6px) rotate(-1deg) } 75% { transform: translateX(6px) rotate(1deg) } }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important } .tts.shake div { animation: none } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } .tts.shake div, .tts-walk, .tts-walk * { animation: none !important } .tts-walk { left: 50%; transform: translateX(-50%) } }
 </style>
 </head>
 <body>
@@ -2112,11 +2120,21 @@ const HIST = {"reality":{"o15":{"label":"Meer dan 1.5 goals","overall":0.7427,"b
       el.className = "tts"; el.setAttribute("role", "presentation");
       el.innerHTML = `<div><span>Tung</span><span>Tung</span><span>Tung</span><span class="sahur">Sahur!</span></div>`;
       document.body.appendChild(el);
+      // the StreakScout football walks across the screen
+      const ball = document.querySelector(".brand .logo svg");
+      const walker = document.createElement("div");
+      walker.className = "tts-walk";
+      walker.innerHTML = `<svg viewBox="0 0 84 118" width="84" height="118" aria-hidden="true">
+        <g class="leg l"><rect x="27" y="70" width="6" height="34" rx="3" fill="#e9edf5"/><rect x="22" y="101" width="16" height="8" rx="4" fill="#0038b8"/></g>
+        <g class="leg r"><rect x="51" y="70" width="6" height="34" rx="3" fill="#e9edf5"/><rect x="46" y="101" width="16" height="8" rx="4" fill="#0038b8"/></g>
+        <g class="body"><svg x="4" y="0" width="76" height="76" viewBox="0 0 32 32" style="color:#fff">${ball ? ball.innerHTML : ""}</svg>
+</g></svg>`;
+      document.body.appendChild(walker);
       const sp = el.querySelectorAll("span");
       [0, 380, 760, 1250].forEach((ms, i) => setTimeout(() => { sp[i].classList.add("on"); el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake"); }, ms));
       [0, 0.38, 0.76].forEach((t) => knock(t, 190)); knock(1.25, 120); knock(1.32, 95);
-      const close = () => { el.remove(); busy = false; };
-      el.addEventListener("click", close); setTimeout(close, 3200);
+      const close = () => { el.remove(); walker.remove(); busy = false; };
+      el.addEventListener("click", close); setTimeout(close, 3300);
     }
     document.addEventListener("keydown", (e) => {
       if (e.target.closest && e.target.closest("input, select, textarea")) return;

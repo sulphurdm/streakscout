@@ -40,9 +40,8 @@ button, input, select { font: inherit; color: inherit }
 .top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px }
 .brand { display: flex; align-items: center; gap: 10px }
 .brand h1 { margin: 0; font: 700 26px/1 var(--f-display); letter-spacing: .02em; text-transform: uppercase }
-.logo { display: inline-flex; gap: 3px }
-.logo i { width: 8px; height: 8px; border-radius: 50%; background: var(--hit) }
-.logo i.o { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted) }
+.logo { display: inline-flex; color: var(--ink) }
+.logo svg { display: block }
 .chip-data { font-size: 12.5px; color: var(--muted); background: var(--sunk); border-radius: 999px; padding: 5px 11px }
 .chip-data b { color: var(--ink); font-weight: 600 }
 
@@ -313,7 +312,7 @@ footer a { color: inherit }
 
 <div class="app">
   <header class="top">
-    <div class="brand"><span class="logo" aria-hidden="true"><i></i><i></i><i class="o"></i><i></i><i></i></span><h1>StreakScout</h1></div>
+    <div class="brand"><span class="logo" aria-hidden="true"><svg viewBox="0 0 32 32" width="34" height="34"><defs><clipPath id="ballClip"><circle cx="16" cy="16" r="14.4"/></clipPath></defs><circle cx="16" cy="16" r="14.4" fill="#fff"/><g clip-path="url(#ballClip)"><rect x="0" y="5.2" width="32" height="3.1" fill="#0038b8"/><rect x="0" y="23.7" width="32" height="3.1" fill="#0038b8"/><polygon points="3.2,12.6 6.4,14.9 5.2,18.8 1.2,18.8 0,14.9" fill="#d5dbe6"/><polygon points="28.8,12.6 32,14.9 30.8,18.8 26.8,18.8 25.6,14.9" fill="#d5dbe6"/><polygon points="16,0.6 19,2.8 17.9,5.2 14.1,5.2 13,2.8" fill="#d5dbe6"/><polygon points="16,31.4 19,29.2 17.9,26.8 14.1,26.8 13,29.2" fill="#d5dbe6"/><path d="M6.4 14.9 10.9 13.05 M5.2 18.8 10.9 18.95 M25.6 14.9 21.1 13.05 M26.8 18.8 21.1 18.95" stroke="#c3cad8" stroke-width=".9" fill="none"/></g><path d="M16 10.1 21.1 18.95 10.9 18.95Z M16 21.9 10.9 13.05 21.1 13.05Z" fill="none" stroke="#0038b8" stroke-width="1.5" stroke-linejoin="round"/><circle cx="16" cy="16" r="14.4" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2"/></svg></span><h1>StreakScout</h1></div>
     <div class="chip-data" id="dataChip"></div>
   </header>
 

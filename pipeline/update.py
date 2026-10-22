@@ -270,6 +270,15 @@ def bets_report(state, out, today, report):
         report["deep_dive"] = {"error": f"{type(e).__name__}: {e}"}
 
 
+def history_report(state, out, report):
+    """Profit or loss of all betjes and the analysis of the lost ones (history.py): on the page and in report.json."""
+    try:
+        import history
+        report["history"] = history.apply(state, out)
+    except Exception as e:  # noqa: BLE001
+        report["history"] = {"error": f"{type(e).__name__}: {e}"}
+
+
 def finalize(root, today, now_s):
     """After the deep dive: merge the research, use Claude's picks when they meet the rules, rebuild the page."""
     state, out = root / "state", root / "out"
@@ -277,9 +286,21 @@ def finalize(root, today, now_s):
     subprocess.run(["node", str(HERE / "superbet_cli.js"), str(out), str(today), str(state / "superbet.json"),
                     str(state / "superbet_week.json"), now_s, str(state / "betje.json"), "finalize"], check=True)
     bets_report(state, out, today, report)
+    # Claude's analysis of lost bets (choice.json "analysis": {bet id: text}) is kept in state/analysis.json
+    try:
+        ch = json.load(open(state / "choice.json")) if (state / "choice.json").exists() else {}
+        if isinstance(ch.get("analysis"), dict) and ch["analysis"]:
+            ap_ = state / "analysis.json"
+            notes = json.load(open(ap_)) if ap_.exists() else {}
+            notes.update({str(k): str(v)[:700] for k, v in ch["analysis"].items() if v})
+            json.dump(notes, open(ap_, "w"), ensure_ascii=False, indent=1)
+            report.setdefault("deep_dive", {})["analysis"] = len(ch["analysis"])
+    except Exception as e:  # noqa: BLE001
+        report.setdefault("deep_dive", {})["analysis_error"] = f"{type(e).__name__}: {e}"
+    history_report(state, out, report)
     subprocess.run([sys.executable, "-I", str(HERE / "build.py"), str(out), str(root / "dist" / "streakscout.html")], check=True)
     json.dump(report, open(state / "report.json", "w"), ensure_ascii=False, indent=1, default=str)
-    print(json.dumps({k: report.get(k) for k in ("betje", "superbet", "deep_dive")}, ensure_ascii=False, indent=1, default=str))
+    print(json.dumps({k: report.get(k) for k in ("betje", "superbet", "deep_dive", "history")}, ensure_ascii=False, indent=1, default=str))
 
 
 def main():
@@ -751,6 +772,7 @@ def main():
         report["track"] = {k: tr.get(k) for k in ("settled", "open", "all", "superbet_week", "betje", "players")}
     except Exception as e:  # noqa: BLE001
         report["track"] = {"error": str(e)}
+    history_report(state, out, report)
     run(sys.executable, "-I", str(HERE / "build.py"), str(out), str(root / "dist" / "streakscout.html"))
     report["recent_rows"] = int(len(rec))
     report["fixtures_total"] = len(fixtures)

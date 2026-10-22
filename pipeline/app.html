@@ -157,6 +157,7 @@ button, input, select { font: inherit; color: inherit }
 .combo ol small { color: var(--muted) }
 .combo-sum { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: center; font-size: 13.5px; color: var(--muted) }
 .combo-sum b { color: var(--ink); font-family: var(--f-mono); font-size: 16px }
+.pl-bar .go { border: 0; background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer }
 .combo-sum .go { margin-left: auto; border: 0; background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer }
 .combo.super { border-color: var(--accent); box-shadow: inset 4px 0 0 var(--accent) }
 .combo.super ol li { line-height: 1.45 }
@@ -246,6 +247,31 @@ td.na { color: var(--muted) }
 .method { font-size: 13px; color: var(--muted); max-width: 72ch; display: grid; gap: 6px }
 .method p { margin: 0 }
 
+/* Historiek: profit or loss of all betjes */
+.pl-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 14px }
+.pl-bar b.pos, .tk .big.pos, .lp.pos { color: var(--hit) } .pl-bar b.neg, .tk .big.neg, .lp.neg { color: var(--bad) }
+.lab { display: inline-block; font: 600 11px/1.6 var(--f-body); padding: 0 7px; border-radius: 9px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap }
+.lab.luck { background: var(--warn-soft); color: var(--warn) } .lab.bad { background: var(--bad-soft); color: var(--bad) }
+.lab.mix { background: var(--sunk); color: var(--muted) } .lab.won { background: var(--hit-soft); color: var(--hit) }
+.loglist { display: grid }
+.logbet { border-top: 1px solid var(--line); padding: 10px 0 }
+.logbet summary { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 10px; align-items: center; cursor: pointer; list-style: none }
+.logbet summary::-webkit-details-marker { display: none }
+.logbet .ld { font-size: 12.5px; color: var(--muted); white-space: nowrap }
+.logbet .ln { min-width: 0 } .logbet .ln small { color: var(--muted) }
+.logbet .lp { font-family: var(--f-mono); font-weight: 600; white-space: nowrap; text-align: right }
+.logbet .lr { grid-column: 2 / 4 }
+.logbet ol { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px }
+.logbet ol li { display: flex; gap: 8px; align-items: flex-start }
+.logbet ol small { color: var(--muted) }
+.logbet .lg { font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--muted); text-transform: uppercase; margin-right: 6px }
+.logbet .why { margin-top: 8px; display: grid; gap: 4px }
+.logbet .why ul { margin: 0; padding-left: 18px }
+#logWrap .takeaways { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) }
+#logStake { width: 80px; font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink) }
+@media (max-width: 560px) { .logbet summary { grid-template-columns: 1fr auto } .logbet .ld { grid-column: 1 / 3 } .logbet .lr { grid-column: 1 / 3 } }
+
 footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 4px }
 footer a { color: inherit }
 
@@ -311,6 +337,7 @@ footer a { color: inherit }
     <button class="tab" role="tab" id="t-best" aria-controls="p-best" aria-selected="false">Beste bets</button>
     <button class="tab" role="tab" id="t-form" aria-controls="p-form" aria-selected="false">Laatste matchen</button>
     <button class="tab" role="tab" id="t-hist" aria-controls="p-hist" aria-selected="false">Kloppen reeksen?</button>
+    <button class="tab" role="tab" id="t-log" aria-controls="p-log" aria-selected="false">Historiek</button>
   </nav>
 
   <section id="p-bets" role="tabpanel" aria-labelledby="t-bets" style="display:grid; gap:12px">
@@ -411,6 +438,12 @@ footer a { color: inherit }
       <div class="method" id="method"></div>
     </div>
   </section>
+
+  <section id="p-log" role="tabpanel" aria-labelledby="t-log" hidden>
+    <div class="hist" id="logWrap"></div>
+  </section>
+
+  <div class="pl-bar" id="plBar" hidden></div>
 
   <footer>
     <div>StreakScout is een hulpje om reeksen snel te lezen. Het voorspelt niet beter dan de bookmaker en garandeert geen winst. Zet enkel in wat je kan missen.</div>
@@ -1363,11 +1396,57 @@ const HIST = /*__HISTORY__*/null;
   $("bestSig").addEventListener("change", () => { best.sig = $("bestSig").checked; renderBest(); });
   $("bestLegs").addEventListener("click", (e) => { const b = e.target.closest("button[data-n]"); if (b) { best.legs = +b.dataset.n; renderBest(); } });
 
+  // ---------- Historiek: profit or loss of all betjes (stake 1 unit each) and where the lost ones went wrong ----------
+  const LAB_CLS = { "Pech": "luck", "Ongelukkig": "luck", "Krap mis": "luck", "Te riskant": "bad", "Verkeerd ingeschat": "bad", "Slechte avond": "bad", "Gemengd": "mix" };
+  const nl = (x, d = 2) => Number(x).toFixed(d).replace(".", ",");
+  const units = (x) => `${x > 0 ? "+" : x < 0 ? "−" : ""}${nl(Math.abs(x))}`;
+  const euro = (x) => { const st = +store.get("stake", 0); return st > 0 ? `${x > 0 ? "+" : x < 0 ? "−" : ""}€${nl(Math.abs(x) * st)}` : ""; };
+  function renderPlBar() {
+    const H = DATA.betHistory, el = $("plBar");
+    if (!H || !H.total || !H.total.settled) { el.hidden = true; return; }
+    const t = H.total, e = euro(t.profit);
+    el.hidden = false;
+    el.innerHTML = `<span>Winst of verlies van alle betjes: <b class="${t.profit >= 0 ? "pos" : "neg"}">${units(t.profit)} eenheden${e ? ` (${e})` : ""}</b> · ${t.won} van ${t.settled} gewonnen${t.open ? ` · ${t.open} lopen nog` : ""}</span><button class="go" id="plGo">Bekijk de historiek</button>`;
+    $("plGo").addEventListener("click", () => { setTab("log"); $("t-log").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  }
+  function renderLog() {
+    const H = DATA.betHistory, wrap = $("logWrap");
+    if (!H || !H.total) { wrap.innerHTML = `<div class="lead"><h2>Historiek</h2><p>Nog geen betjes afgerekend.</p></div>`; return; }
+    const t = H.total, nm = (x) => DISPLAY[x] || x, stake = +store.get("stake", 0);
+    const lname = (d) => (DATA.divNames[d] || (DATA.cups[d] && DATA.cups[d].name) || d);
+    const e = euro(t.profit);
+    const lead = `<div class="lead"><h2>Historiek van alle betjes</h2><p>Elk betje telt met een inzet van 1 eenheid: betje van de dag, de Champions League-, Europa League- en Conference League-avond, de safe combi, de superbet van de week en de second chance. Winst is de combi-odd min 1 (met de odds op de site; die zijn vaak geschat), verlies is −1. Bij elk verloren betje staat waar het misliep en of dat pech was of een slechte keuze.</p>
+      <label class="note">Jouw inzet per betje: € <input id="logStake" inputmode="decimal" placeholder="bv. 2" value="${stake > 0 ? nl(stake).replace(/,00$/, "") : ""}" aria-label="Inzet per betje in euro"></label></div>`;
+    const tiles = `<div class="takeaways">
+      <div class="tk"><div class="big ${t.profit >= 0 ? "pos" : "neg"}">${units(t.profit)}<small>eenheden</small></div><p>Winst of verlies over <b>${t.settled}</b> afgerekende betjes${e ? `: <b>${e}</b> bij jouw inzet` : ""}${t.roi != null ? ` (${t.roi >= 0 ? "+" : "−"}${Math.round(Math.abs(t.roi) * 100)}% per inzet)` : ""}.</p></div>
+      <div class="tk"><div class="big">${t.won}<small>van ${t.settled}</small></div><p>Gewonnen. Volgens de kansen werd <b>±${nl(t.exp_wins, 1)}</b> verwacht.</p></div>
+      <div class="tk"><div class="big">${t.legs ? Math.round((t.legs_hit / t.legs) * 100) : "–"}%<small>van ${t.legs} bets</small></div><p>Zo vaak kwamen de afzonderlijke bets in de combi's uit; voorspeld was <b>${Math.round((t.legs_p || 0) * 100)}%</b>.</p></div>
+      <div class="tk"><div class="big">${t.one_off}<small>van ${t.lost}</small></div><p>Verloren betjes die op maar <b>één</b> bet misten.</p></div></div>`;
+    const verdict = `<div class="panel"><h3>Pech of slechte keuzes?</h3><p class="note">${esc(H.verdict)}</p>${Object.keys(t.labels || {}).length ? `<p class="note">${Object.entries(t.labels).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span class="lab ${LAB_CLS[k] || "mix"}">${esc(k)}</span> ${v}×`).join(" &nbsp; ")}</p>` : ""}</div>`;
+    const by = `<div class="panel"><h3>Per soort betje</h3><div class="tbl-wrap"><table><thead><tr><th>Soort</th><th>Afgerekend</th><th>Gewonnen</th><th>Verwacht</th><th>Winst</th><th>Loopt</th></tr></thead><tbody>${H.by.map((x) =>
+      `<tr><td>${esc(x.type)}</td><td>${x.n}</td><td>${x.won}</td><td>±${nl(x.exp_wins, 1)}</td><td class="roi ${x.profit > 0 ? "pos" : x.profit < 0 ? "neg" : ""}">${x.n ? units(x.profit) : "–"}</td><td>${x.open || ""}</td></tr>`).join("")}</tbody></table></div></div>`;
+    const fam = H.families && H.families.length ? `<div class="panel"><h3>Waar liep het mis?</h3><p class="note">Alle afzonderlijke bets in afgerekende betjes, per soort markt: hoe vaak ze misten, en hoe vaak ze uitkwamen tegenover de voorspelde kans.</p><div class="tbl-wrap"><table><thead><tr><th>Markt</th><th>Bets</th><th>Gemist</th><th>Uitgekomen</th><th>Voorspeld</th></tr></thead><tbody>${H.families.map((f) =>
+      `<tr><td>${esc(f.family)}</td><td>${f.n}</td><td>${f.lost}</td><td class="roi ${f.hit / f.n < f.p - 0.05 ? "neg" : f.hit / f.n > f.p + 0.05 ? "pos" : ""}">${Math.round((f.hit / f.n) * 100)}%</td><td>${Math.round(f.p * 100)}%</td></tr>`).join("")}</tbody></table></div></div>` : "";
+    const list = H.bets.slice(0, 80).map((b) => {
+      const won = b.status === "gewonnen", lost = b.status === "verloren";
+      const pr = b.profit == null ? `<span class="lp">loopt</span>` : `<span class="lp ${b.profit > 0 ? "pos" : b.profit < 0 ? "neg" : ""}">${units(b.profit)}</span>`;
+      const lab = won ? `<span class="lab won">Gewonnen</span>` : lost && b.judge ? `<span class="lab ${LAB_CLS[b.judge.label] || "mix"}">${esc(b.judge.label)}</span>` : b.status === "vervallen" ? `<span class="lab mix">Vervallen</span>` : `<span class="lab mix">Loopt nog</span>`;
+      const legs = b.legs.map((l) => `<li>${legIcon(l)}<span>${b.group === "betje" || b.group === "week" || b.group === "second" || b.group === "daily" || b.group === "eusafe" ? `<span class="lg">${esc(lname(l.div))}</span>` : ""}${esc(l.label)} <small>· ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""} · ${l.pb ?? l.p ? pct(l.pb ?? l.p) : ""} · ±${(l.odd || 0).toFixed(2)}</small></span></li>`).join("");
+      const j = b.judge ? `<div class="why"><p class="note"><b>${esc(b.judge.label)}.</b> ${esc(b.judge.why)}</p><ul class="note">${b.judge.lost.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+      const an = b.analysis ? `<p class="note" style="margin-top:6px"><b>Analyse van Claude:</b> ${esc(b.analysis)}</p>` : "";
+      return `<details class="logbet"><summary><span class="ld">${esc(fmtISO(b.day))}</span><span class="ln"><b>${esc(b.name)}</b> <small>· ${esc(b.type)} · ${b.odds.toFixed(2)}x</small></span>${pr}<span class="lr">${lab}${b.judge ? ` <small class="note">${b.judge.legs_ok} goed · ${b.judge.legs_lost} fout${b.judge.legs_open ? ` · ${b.judge.legs_open} niet meer afgewacht` : ""}</small>` : ""}</span></summary><ol>${legs}</ol>${j}${an}</details>`;
+    }).join("");
+    const legend = `<p class="note"><b>Pech</b>: één bet met een grote kans (65%+) miste op één goal of corner. <b>Ongelukkig</b>: één waarschijnlijke bet miste. <b>Krap mis</b>: elke gemiste bet miste op een haar. <b>Te riskant</b>: de bet die miste had minder dan 60% kans of stond in het onderzoek al op riskant. <b>Verkeerd ingeschat</b>: een match liep ruim anders (3 goals of meer verschil). <b>Slechte avond</b>: meerdere bets misten duidelijk.</p>`;
+    wrap.innerHTML = `${lead}${tiles}${verdict}${by}${fam}<div class="panel"><h3>Alle betjes</h3><div class="loglist">${list}</div>${legend}</div>`;
+    $("logStake").addEventListener("change", () => { const v = parseFloat(String($("logStake").value).replace(",", ".")); store.set("stake", v > 0 ? v : 0); renderLog(); renderPlBar(); });
+  }
+
   // ---------- tabs ----------
-  const TABS = { bets: ["t-bets", "p-bets"], best: ["t-best", "p-best"], form: ["t-form", "p-form"], hist: ["t-hist", "p-hist"] };
+  const TABS = { bets: ["t-bets", "p-bets"], best: ["t-best", "p-best"], form: ["t-form", "p-form"], hist: ["t-hist", "p-hist"], log: ["t-log", "p-log"] };
   function setTab(t) {
     state.tab = t;
     for (const [k, [tb, pn]] of Object.entries(TABS)) { $(tb).setAttribute("aria-selected", k === t); $(pn).hidden = k !== t; }
+    if (t === "log") renderLog();
     if (t === "hist") drawChart();
     if (t === "form") renderForm();
     if (t === "best") renderBest();
@@ -1389,6 +1468,8 @@ const HIST = /*__HISTORY__*/null;
   renderHistStatic();
   setLeague("B1");
   renderSlip();
+  renderPlBar();
   if (location.hash === "#kloppen-reeksen") setTab("hist");
+  if (location.hash === "#historiek") setTab("log");
 })();
 </script>

@@ -57,41 +57,66 @@ const explain = (b) => {
   if (b && b.btts) explain(b.btts);
 };
 
-// Champions League-avond: on a day with Champions League matches, combis of at least 5x from that day's CL matches only:
-// two different ones of 5x+ (no match in both) and a "knaller" of 10x+. Only markets settled by the final score
-// (CL matches have no football-data statistics); odds are estimates (no bookmaker odds for the cups).
+// European nights: on a day with Champions League, Europa League or Conference League matches, combis of at least 5x
+// from that day's matches of that competition only: two different ones of 5x+ (no match in both) and a "knaller" of 10x+.
+// On a day with Europa League and Conference League matches there is also one "safe" combi (about 2-3x) from both.
+// Only markets settled by the final score (the cups have no football-data statistics); odds are estimates.
+// Stored per day in betje.json under the group's key: cl, el, ecl, eusafe (arrays of combis), with <key>_note.
 const CL_IDS = new Set(["win@H", "win@A", "draw", "nolose@H", "nolose@A", "12", "o15", "o25", "u25", "o35", "u35",
   "btts", "bttsno", "sc1@H", "sc1@A", "sc2@H", "sc2@A", "cs@H", "cs@A"]);
-const clToday = () => data.fixtures.filter((f) => f.div === "CL" && f.when.slice(0, 10) === today && f.when > now);
-// Spread rule for the CL night: the same bet, or one that comes down to the same thing, is never in every combi
-// (if it fails, they all fail; on 20/10 all three lost on Porto). A match may be in several combis with a different bet.
+const EU = [
+  { key: "cl", divs: ["CL"], name: "Champions League-avond", short: "CL-avond", tag: "CL" },
+  { key: "el", divs: ["EL"], name: "Europa League-avond", short: "EL-avond", tag: "EL" },
+  { key: "ecl", divs: ["ECL"], name: "Conference League-avond", short: "ECL-avond", tag: "ECL" },
+  { key: "eusafe", divs: ["EL", "ECL"], name: "Europese safe combi", short: "Safe combi EL + ECL", tag: "EL/ECL", safe: true },
+];
+const euToday = (divs) => data.fixtures.filter((f) => divs.includes(f.div) && f.when.slice(0, 10) === today && f.when > now);
+const groupOn = (g) => (g.safe ? g.divs.every((d) => euToday([d]).length >= 1) && euToday(g.divs).length >= 2 : euToday(g.divs).length >= 2);
+const clToday = () => euToday(["CL"]);
+// Spread rule for a European night: the same bet, or one that comes down to the same thing, is never in every combi
+// (if it fails, they all fail; on 20/10 all three CL combis lost on Porto). A match may be in several combis with a different bet.
 // Per match: H = needs the home team to score or not to lose, A = the same for the away team, G+ = goals, G- = few goals.
 const CORE = { "win@H": ["H"], "nolose@H": ["H"], "sc1@H": ["H"], "sc2@H": ["H"], "win@A": ["A"], "nolose@A": ["A"], "sc1@A": ["A"],
   "sc2@A": ["A"], btts: ["H", "A", "G+"], o15: ["G+"], o25: ["G+"], o35: ["G+"], u25: ["G-"], u35: ["G-"], bttsno: ["G-"],
   "cs@H": ["G-"], "cs@A": ["G-"] };
 const CORE_TXT = { H: "de thuisploeg moet scoren of niet verliezen", A: "de uitploeg moet scoren of niet verliezen", "G+": "er moeten goals vallen", "G-": "er mogen weinig goals vallen" };
-function sharedCore(bets) {
+function sharedCore(bets, tag = "CL") {
   if (bets.length < 2) return null;
   const sets = bets.map((b) => new Set(b.legs.flatMap((l) => (CORE[l.id] || [l.id]).map((t) => (l.mkey || l.h + "|" + l.a) + "|" + t))));
   for (const t of sets[0]) if (sets.every((s) => s.has(t))) {
-    const [h, a, tag] = t.split("|");
-    return `${h}-${a} zit in alle ${bets.length} CL-betjes met een bet die op hetzelfde neerkomt (${CORE_TXT[tag] || tag}); als die misloopt, verliezen ze allemaal`;
+    const [h, a, k] = t.split("|");
+    return `${h}-${a} zit in alle ${bets.length} ${tag}-betjes met een bet die op hetzelfde neerkomt (${CORE_TXT[k] || k}); als die misloopt, verliezen ze allemaal`;
   }
   return null;
 }
-function clNight() {
-  if (clToday().length < 2) return null;
-  const mk = (target, maxLegs, exclude) => M.superbet(eng, data, hist, { from: today, to: today, after: now, target, maxLegs, minP: 0.6,
-    ids: CL_IDS, onlyDivs: new Set(["CL"]), exclude });
+function euNight(g) {
+  if (!groupOn(g)) return null;
+  const mk = (target, maxLegs, exclude, minP = 0.6) => M.superbet(eng, data, hist, { from: today, to: today, after: now, target, maxLegs, minP,
+    ids: CL_IDS, onlyDivs: new Set(g.divs), exclude });
   const out = [];
+  if (g.safe) {
+    // the safe combi: the surest legs of both competitions, about 2-3x
+    let s = mk(2.2, 4, undefined, 0.72);
+    if (s.reached && !g.divs.every((d) => s.legs.some((l) => l.div === d))) {
+      // at least one leg from each competition: the surest part of one to ±1.5x, the other for the rest
+      const one = (d, target, maxLegs) => M.superbet(eng, data, hist, { from: today, to: today, after: now, target, maxLegs, minP: 0.72,
+        ids: CL_IDS, onlyDivs: new Set([d]) });
+      const a = one(g.divs[0], 1.45, 2), b = a.reached ? one(g.divs[1], 2.2 / a.odds, 2) : null;
+      s = a.reached && b && b.reached ? { legs: [...a.legs, ...b.legs], odds: Math.round(a.odds * b.odds * 100) / 100, p: a.p * b.p,
+        reached: true, allPriced: a.allPriced && b.allPriced } : { legs: [], reached: false };
+    }
+    if (s.reached && s.legs.length >= 2) { s.legs.sort((x, y) => (x.when < y.when ? -1 : 1)); out.push(stamp(s, g.short)); }
+    for (const x of out) { x.chosen_by = "model"; x.target = 2.2; }
+    return out;
+  }
   const a = mk(5, 6);
-  if (a.reached && a.legs.length >= 2) out.push(stamp(a, "CL-avond betje 1"));
+  if (a.reached && a.legs.length >= 2) out.push(stamp(a, `${g.short} betje 1`));
   const used = new Set(out.flatMap((b) => b.legs.map((l) => l.h + "|" + l.a)));
   const b = mk(5, 6, used);
-  if (b.reached && b.legs.length >= 2) out.push(stamp(b, "CL-avond betje 2"));
+  if (b.reached && b.legs.length >= 2) out.push(stamp(b, `${g.short} betje 2`));
   // betje 1 and 2 share no match, so the knaller can use any match; with only one other combi it stays apart from it
   const c = mk(10, 8, out.length === 1 ? used : undefined);
-  if (c.reached && c.legs.length >= 2 && !out.some((x) => x.odds === c.odds && x.legs.length === c.legs.length) && !sharedCore([...out, c])) out.push(stamp(c, "CL-avond knaller"));
+  if (c.reached && c.legs.length >= 2 && !out.some((x) => x.odds === c.odds && x.legs.length === c.legs.length) && !sharedCore([...out, c], g.tag)) out.push(stamp(c, `${g.short} knaller`));
   for (const x of out) { x.chosen_by = "model"; x.target = x.target || 5; }
   return out;
 }
@@ -122,23 +147,25 @@ let bjToday = BJ.find((x) => x.day === today && (!x.none || x.chosen_by === "cla
 let bjMade = false;
 if (!bjToday && !FINAL) {
   const bj = M.betje(eng, data, hist, { day: today, after: now, skipDivs: failed });
-  const prevCl = (BJ.find((x) => x.day === today) || {}).cl;
+  const prevDay = BJ.find((x) => x.day === today) || {};
   BJ = BJ.filter((x) => x.day !== today);
   if (bj.legs.length >= 2) {
     bjToday = Object.assign(bj, { name: "Betje van de dag", made: now, status: "bezig", legs_hit: 0, chosen_by: "model",
       legs: bj.legs.map((l) => Object.assign(l, { hit: null })) });
     bjMade = true;
   } else bjToday = { day: today, none: true, made: now, note: bj.note, priced: bj.priced, candidates: bj.candidates };
-  if (prevCl) bjToday.cl = prevCl;
+  for (const g of EU) if (prevDay[g.key]) { bjToday[g.key] = prevDay[g.key]; if (prevDay[g.key + "_note"]) bjToday[g.key + "_note"] = prevDay[g.key + "_note"]; }
   BJ.push(bjToday);
   BJ = BJ.slice(-60);
 }
 if (!bjToday) bjToday = BJ.find((x) => x.day === today) || null;
-if (!FINAL && betjeFile && clToday().length >= 2) {
+if (!FINAL && betjeFile) for (const g of EU) {
+  if (!groupOn(g)) continue;
   if (!bjToday) { bjToday = { day: today, none: true, made: now, note: "nog geen betje" }; BJ.push(bjToday); }
-  if (!bjToday.cl || !bjToday.cl.length) { const cl = clNight(); if (cl && cl.length) bjToday.cl = cl; }
+  if (!bjToday[g.key] || !bjToday[g.key].length) { const n = euNight(g); if (n && n.length) bjToday[g.key] = n; }
 }
-if (bjToday) { explain(bjToday); for (const c of bjToday.cl || []) explain(c); }
+const euCombis = (t) => EU.flatMap((g) => (t && t[g.key]) || []);
+if (bjToday) { explain(bjToday); for (const c of euCombis(bjToday)) explain(c); }
 
 // ---- dossier for the deep dive: the matches to research, with the model's numbers for every market
 const RESEARCH = readJ(path.join(stateDir, "research.json"), {});
@@ -214,8 +241,8 @@ function writeDossier() {
   }
   cands.sort((x, y) => y.score - x.score).slice(0, 10).forEach((c) => add(c.f, "kandidaat betje van de dag", null));
   if (bjToday && !bjToday.none) legsOf(bjToday, "betje van de dag");
-  for (const c of (bjToday && bjToday.cl) || []) legsOf(c, c.name);
-  if (bjToday && bjToday.cl) for (const f of clToday()) add(f, "kandidaat CL-avond", null);
+  for (const c of euCombis(bjToday)) legsOf(c, c.name);
+  for (const g of EU) if (!g.safe && bjToday && bjToday[g.key]) for (const f of euToday(g.divs)) add(f, `kandidaat ${g.short}`, null);
   if (W) for (const [k, nmK] of [["main", "superbet of the week"], ["second", "second chance"]]) {
     if (!W[k]) continue;
     legsOf(W[k], nmK, true);
@@ -227,7 +254,7 @@ function writeDossier() {
     // research order: 1 legs of today's betje and its BTTS-optie, 2 weekly legs played today or tomorrow,
     // 3 other candidates for today's betje, 4 weekly legs later this week (only when that bet was made today)
     const r = d.roles.join(" | "), soon = f.when.slice(0, 10) <= tomorrow;
-    d.priority = /^betje van de dag|^CL-avond|^kandidaat CL-avond/m.test(d.roles.join("\n")) ? 1
+    d.priority = /^betje van de dag|^(CL|EL|ECL)-avond|^Safe combi|^kandidaat (CL|EL|ECL)-avond/m.test(d.roles.join("\n")) ? 1
       : (soon && /superbet|second chance/.test(r)) ? 2 : /kandidaat/.test(r) ? 3 : 4;
     matches.push(d);
   }
@@ -236,9 +263,12 @@ function writeDossier() {
   fs.writeFileSync(path.join(stateDir, "dossier.json"), JSON.stringify({ today, now, rules: {
     betje: "2 tot 4 bets uit de matches van vandaag (rol 'kandidaat betje van de dag'), één per match, elke markt mag (uitslag, dubbele kans, goals, BTTS ja/nee, corners, kaarten, schoten); samen 4 tot 7,5x (mik op ±5x); enkel bets die je na je onderzoek 'sterk' of 'ok' vindt",
     cl: "Champions League-avond (enkel als er vandaag CL-matchen zijn): 1 tot 4 combi's uit de CL-matchen van vandaag (rol 'kandidaat CL-avond'), elk 2 tot 6 bets, één per match, samen minstens 5x (hoogstens 40x), enkel markten die op de eindstand afgerekend worden (uitslag, dubbele kans, goals, BTTS, scoren, nul houden), enkel bets die je 'sterk' of 'ok' vindt; de odds zijn geschat. Spreiden: dezelfde bet, of een bet die op hetzelfde neerkomt (bv. 'Porto wint of gelijk' en 'Porto scoort': allebei moet Porto het goed doen; BTTS telt voor beide ploegen en voor goals), staat nooit in alle combi's tegelijk; een match mag wel in meerdere combi's met een andere bet. Ook als het onderzoek beperkt is: maak de combi's toch, met de beste info die je hebt",
+    el: "Europa League-avond (enkel als er vandaag EL-matchen zijn): dezelfde regels als de Champions League-avond, maar enkel met de EL-matchen van vandaag (rol 'kandidaat EL-avond')",
+    ecl: "Conference League-avond (enkel als er vandaag ECL-matchen zijn): dezelfde regels als de Champions League-avond, maar enkel met de ECL-matchen van vandaag (rol 'kandidaat ECL-avond')",
+    eusafe: "Europese safe combi (enkel op een dag met EL- én ECL-matchen): precies 1 combi van 2 tot 4 bets uit de EL- en ECL-matchen van vandaag samen, minstens één uit elke competitie, samen 1,8 tot 3,5x (mik op ±2,5x); enkel markten die op de eindstand afgerekend worden en de bets die je het zekerst vindt (bij voorkeur 'sterk', nooit 'riskant' of 'afgeraden')",
     week: weekMadeToday ? "de superbet van de week is vandaag gemaakt: je mag hem nog aanpassen (2 tot 14 bets uit alle matches van deze week in het dossier, elke markt mag, ook BTTS; samen 15 tot 30x); daarna verandert hij niet meer" : "de weekbets liggen vast: enkel onderzoeken en beoordelen",
     current: { betje: bjToday && !bjToday.none ? bjToday.legs.map((l) => ({ key: keyOf(l), id: l.id })) : [],
-      cl: ((bjToday && bjToday.cl) || []).map((c) => ({ name: c.name, odds: c.odds, legs: c.legs.map((l) => ({ key: keyOf(l), id: l.id })) })),
+      ...Object.fromEntries(EU.map((g) => [g.key, ((bjToday && bjToday[g.key]) || []).map((c) => ({ name: c.name, odds: c.odds, legs: c.legs.map((l) => ({ key: keyOf(l), id: l.id })) }))])),
     },
     week_made_today: weekMadeToday }, matches }, null, 1));
   return matches;
@@ -312,37 +342,42 @@ if (FINAL) {
   // Claude can also decide there is no good betje today: empty legs with a reason
   const noneOf = (ch) => ch && Array.isArray(ch.legs) && !ch.legs.length && ch.reason;
   if (bjToday && noneOf(choice.betje)) {
-    const keepCl = { cl: bjToday.cl, cl_note: bjToday.cl_note };
+    const keepCl = Object.fromEntries(EU.flatMap((g) => [[g.key, bjToday[g.key]], [g.key + "_note", bjToday[g.key + "_note"]]]));
     BJ = BJ.filter((x) => x.day !== today);
     bjToday = Object.assign({ day: today, none: true, made: bjToday.made || now, decided: now, chosen_by: "claude", note: String(choice.betje.reason).slice(0, 600) }, keepCl);
     BJ.push(bjToday);
     fin.choice.betje = "geen betje vandaag (keuze van Claude)";
     delete choice.betje;
   }
-  // Champions League-avond: {"cl": {"bets": [{"name", "legs": [...], "reason"}, ...], "reason"}} (empty bets: none tonight)
-  if (bjToday && choice.cl && Array.isArray(choice.cl.bets)) {
-    if (!choice.cl.bets.length && choice.cl.reason) {
-      bjToday.cl = [];
-      bjToday.cl_note = String(choice.cl.reason).slice(0, 600);
-      fin.choice.cl = "geen CL-avond betje (keuze van Claude)";
-    } else {
-      const got = [], errs = [];
-      choice.cl.bets.slice(0, 4).forEach((cb, i) => {
-        const [b, err] = applyChoice("cl", cb, { min: 2, max: 6, lo: 5, hi: 40, day: today, ids: CL_IDS });
-        if (b && b.legs.every((l) => l.div === "CL")) got.push(Object.assign({ name: String(cb.name || `CL-avond betje ${i + 1}`).slice(0, 60), target: 5, made: now, decided: now, status: "bezig", legs_hit: 0 }, b));
-        else errs.push(`${cb.name || i + 1}: ${err || "enkel Champions League-matchen"}`);
-      });
-      const shared = got.length && !errs.length ? sharedCore(got) : null;
-      if (shared) errs.push(shared);
-      if (got.length && !errs.length) { bjToday.cl = got; bjToday.cl_note = choice.cl.reason ? String(choice.cl.reason).slice(0, 800) : undefined; fin.choice.cl = `gebruikt (${got.length})`; }
-      else fin.choice.cl = `niet gebruikt: ${errs.join("; ")}`;
+  // European nights: {"cl" | "el" | "ecl" | "eusafe": {"bets": [{"name", "legs": [...], "reason"}, ...], "reason"}} (empty bets: none tonight)
+  for (const g of EU) {
+    const ch = choice[g.key];
+    if (!bjToday || !ch || !Array.isArray(ch.bets)) continue;
+    if (!ch.bets.length && ch.reason) {
+      bjToday[g.key] = [];
+      bjToday[g.key + "_note"] = String(ch.reason).slice(0, 600);
+      fin.choice[g.key] = `geen ${g.short} (keuze van Claude)`;
+      continue;
     }
+    const got = [], errs = [];
+    const opts = g.safe ? { min: 2, max: 4, lo: 1.8, hi: 3.5, day: today, ids: CL_IDS } : { min: 2, max: 6, lo: 5, hi: 40, day: today, ids: CL_IDS };
+    ch.bets.slice(0, g.safe ? 1 : 4).forEach((cb, i) => {
+      const [b, err] = applyChoice(g.key, cb, opts);
+      const divs = b ? new Set(b.legs.map((l) => l.div)) : null;
+      if (b && b.legs.every((l) => g.divs.includes(l.div)) && (!g.safe || g.divs.every((d) => divs.has(d) || !euToday([d]).length)))
+        got.push(Object.assign({ name: String(cb.name || (g.safe ? g.short : `${g.short} betje ${i + 1}`)).slice(0, 60), target: g.safe ? 2.2 : 5, made: now, decided: now, status: "bezig", legs_hit: 0 }, b));
+      else errs.push(`${cb.name || i + 1}: ${err || (g.safe ? "minstens één EL- en één ECL-match, niets anders" : `enkel ${g.tag}-matchen`)}`);
+    });
+    const shared = !g.safe && got.length && !errs.length ? sharedCore(got, g.tag) : null;
+    if (shared) errs.push(shared);
+    if (got.length && !errs.length) { bjToday[g.key] = got; bjToday[g.key + "_note"] = ch.reason ? String(ch.reason).slice(0, 800) : undefined; fin.choice[g.key] = `gebruikt (${got.length})`; }
+    else fin.choice[g.key] = `niet gebruikt: ${errs.join("; ")}`;
   }
   // today's betje
   if (bjToday && choice.betje) {
     const [b, err] = applyChoice("betje", choice.betje, { min: 2, max: 4, lo: 4, hi: 7.5, day: today });
     if (b) {
-      const keepCl = { cl: bjToday.cl, cl_note: bjToday.cl_note };
+      const keepCl = Object.fromEntries(EU.flatMap((g) => [[g.key, bjToday[g.key]], [g.key + "_note", bjToday[g.key + "_note"]]]));
       BJ = BJ.filter((x) => x.day !== today);
       bjToday = Object.assign({ day: today, target: 5, name: "Betje van de dag", made: bjToday.made || now, decided: now, status: "bezig", legs_hit: 0 }, b, keepCl);
       BJ.push(bjToday);
@@ -356,7 +391,7 @@ if (FINAL) {
     else fin.choice.week = `niet gebruikt: ${err}`;
   }
   if (W) { explain(W.main); explain(W.second); }
-  if (bjToday) { explain(bjToday); for (const c of bjToday.cl || []) explain(c); }
+  if (bjToday) { explain(bjToday); for (const c of euCombis(bjToday)) explain(c); }
 }
 if (bjToday && !bjToday.none && !FINAL) bjToday.chosen_by = bjToday.chosen_by || "model";
 const dossier = writeDossier();
@@ -368,7 +403,7 @@ fs.writeFileSync(betjeFile, JSON.stringify(BJ, null, 1));
 // research shown on the page: the matches of the bets on show
 const shown = new Set();
 const mark = (b) => { for (const l of (b && !b.none && b.legs) || []) shown.add(keyOf(l)); if (b && b.btts) mark(b.btts); };
-mark(bjToday); for (const c of (bjToday && bjToday.cl) || []) mark(c); if (W) { mark(W.main); mark(W.second); }
+mark(bjToday); for (const c of euCombis(bjToday)) mark(c); if (W) { mark(W.main); mark(W.second); }
 data.research = {};
 for (const k of shown) if (RESEARCH[k]) data.research[k] = RESEARCH[k];
 
@@ -383,9 +418,15 @@ data.betje = {
 };
 
 
-const cdone = BJ.flatMap((x) => x.cl || []).filter((b) => b.status === "gewonnen" || b.status === "verloren");
-data.betje.clRecord = { n: cdone.length, won: cdone.filter((b) => b.status === "gewonnen").length,
-  profit: Math.round(cdone.reduce((s, b) => s + (b.status === "gewonnen" ? effOdds(b) - 1 : -1), 0) * 100) / 100 };
+// record per European group (stake 1 per combi)
+data.betje.euRecord = {};
+for (const g of EU) {
+  const cdone = BJ.flatMap((x) => x[g.key] || []).filter((b) => b.status === "gewonnen" || b.status === "verloren");
+  data.betje.euRecord[g.key] = { n: cdone.length, won: cdone.filter((b) => b.status === "gewonnen").length,
+    profit: Math.round(cdone.reduce((s, b) => s + (b.status === "gewonnen" ? effOdds(b) - 1 : -1), 0) * 100) / 100 };
+}
+data.betje.clRecord = data.betje.euRecord.cl;
+data.betje.euGroups = EU.map((g) => ({ key: g.key, name: g.name, tag: g.tag, safe: !!g.safe }));
 data.superbetWeek = W;
 delete data.superbet;
 fs.writeFileSync(path.join(out, "app_data.json"), JSON.stringify(data));

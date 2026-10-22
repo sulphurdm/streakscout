@@ -5,7 +5,8 @@ state/superbet_week.json  the current week: {"week", "from", "to", "main": {...}
                           second = "Second chance" (made once when main is lost and enough matches remain)
 state/superbet_weeks.json finished weeks (newest last), for the track record
 
-state/betje.json          the daily "Betje van de dag" (±5x, value legs only), newest last; days without one have "none"
+state/betje.json          the daily "Betje van de dag" (±5x, value legs only), newest last; days without one have "none";
+                          European nights per day under "cl", "el", "ecl" (combis of 5x+) and "eusafe" (EL + ECL safe combi)
 
 A leg gets "hit": 1 (won), 0 (lost) or "void" (no result 3 days after the match, e.g. postponed),
 plus "score". Status per bet: "bezig", "gewonnen" or "verloren". New bets are made in superbet_cli.js.
@@ -15,6 +16,8 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import track
+
+EU_KEYS = ("cl", "el", "ecl", "eusafe")  # European nights stored per day in betje.json
 
 
 def week_of(d):
@@ -116,9 +119,10 @@ def run_betje(state, today, idx):
     for b in B:
         if not b.get("none") and (b.get("status") in (None, "bezig") or (b.get("btts") or {}).get("status") == "bezig"):
             settle_bet(b, idx, today, sidx)
-        for c in b.get("cl") or []:  # Champions League-avond combis
-            if c.get("status") in (None, "bezig"):
-                settle_bet(c, idx, today, sidx)
+        for k in EU_KEYS:  # European nights: Champions League, Europa League, Conference League, safe combi
+            for c in b.get(k) or []:
+                if c.get("status") in (None, "bezig"):
+                    settle_bet(c, idx, today, sidx)
     json.dump(B, open(p, "w"), ensure_ascii=False, indent=1)
     return B
 
@@ -145,11 +149,14 @@ def betje_summary(state):
         by.setdefault(k, {"settled": 0, "won": 0})
         by[k]["settled"] += 1
         by[k]["won"] += b["status"] == "gewonnen"
-    cl = [c for b in B for c in (b.get("cl") or [])]
-    cdone = [c for c in cl if c.get("status") in ("gewonnen", "verloren")]
-    cprofit = sum(eff(c) - 1 if c["status"] == "gewonnen" else -1 for c in cdone)
-    return {"cl": {"made": len(cl), "settled": len(cdone), "won": sum(1 for c in cdone if c["status"] == "gewonnen"),
-                   "profit_units": round(cprofit, 2)},
+    eu = {}
+    for k in EU_KEYS:
+        cl = [c for b in B for c in (b.get(k) or [])]
+        cdone = [c for c in cl if c.get("status") in ("gewonnen", "verloren")]
+        cprofit = sum(eff(c) - 1 if c["status"] == "gewonnen" else -1 for c in cdone)
+        eu[k] = {"made": len(cl), "settled": len(cdone), "won": sum(1 for c in cdone if c["status"] == "gewonnen"),
+                 "profit_units": round(cprofit, 2)}
+    return {**eu,
             "days": len(B), "made": len(bets), "settled": len(done), "won": sum(1 for b in done if b["status"] == "gewonnen"),
             "profit_units": round(profit, 2), "legs_hit": sum(b.get("legs_hit", 0) for b in done),
             "legs": sum(len(b["legs"]) for b in done), "by_chooser": by,

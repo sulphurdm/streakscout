@@ -220,6 +220,7 @@ def bets_report(state, out, today, report):
     """report.json sections for the betje van de dag, the weekly bets (each with its BTTS-optie) and the deep dive."""
     bjp, sbp, wkp = state / "betje.json", state / "superbet.json", state / "superbet_week.json"
     try:  # betje van de dag: today's (or why there is none) and how yesterday's went
+        import weekly
         B = json.load(open(bjp)) if bjp.exists() else []
         cur = next((b for b in B if b.get("day") == str(today)), None)
         prev = [b for b in B if b.get("day", "") < str(today) and not b.get("none")]
@@ -228,13 +229,15 @@ def bets_report(state, out, today, report):
                            dict({"today": "ja"}, **_bet_txt(cur)))
         if cur:
             report["betje"]["btts"] = _bet_txt(cur.get("btts"))
-            if cur.get("cl") is not None:
-                report["betje"]["cl"] = [_bet_txt(c) for c in cur["cl"]]
-                if cur.get("cl_note"):
-                    report["betje"]["cl_note"] = cur["cl_note"]
-        pcl = [c for b in B if b.get("day", "") < str(today) for c in (b.get("cl") or [])]
-        if pcl:
-            report["betje"]["previous_cl"] = [_bet_txt(c) for c in pcl[-4:]]
+        # European nights: cl (Champions League), el (Europa League), ecl (Conference League), eusafe (EL + ECL safe combi)
+        for k in weekly.EU_KEYS:
+            if cur and cur.get(k) is not None:
+                report["betje"][k] = [_bet_txt(c) for c in cur[k]]
+                if cur.get(k + "_note"):
+                    report["betje"][k + "_note"] = cur[k + "_note"]
+            pdays = [b for b in B if b.get("day", "") < str(today) and b.get(k)]
+            if pdays:  # the combis of the last earlier day with this group
+                report["betje"]["previous_" + k] = [dict(_bet_txt(c), day=pdays[-1]["day"]) for c in pdays[-1][k]]
         if prev:
             y = prev[-1]
             report["betje"]["previous"] = {"day": y["day"], "odds": y["odds"], "status": y["status"],

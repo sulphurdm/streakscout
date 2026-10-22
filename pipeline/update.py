@@ -134,18 +134,21 @@ def find(known, h, a, d):
 
 
 def cup_rounds_to_fetch(cups, learned, today, back=1, probe_ahead=FIXTURE_DAYS):
-    """Round pages worth fetching today: rounds starting within [today-back, today+9],
-    plus a round with an unknown date in the week after the previous round (to learn its date)."""
+    """Round pages worth fetching today: rounds starting within [today-back, today+9] or whose last match was
+    yesterday or later (a Champions League round runs Tuesday and Wednesday), plus a round with an unknown date in
+    the week after the previous round (to learn its date)."""
     out = []
     for code, c in cups.items():
         dates = {int(k): date.fromisoformat(v) for k, v in {**c.get("dates", {}), **learned.get(code, {})}.items()}
+        last = {int(k): date.fromisoformat(v) for k, v in learned.get(code + "@last", {}).items()}
         if not dates:
             out.append((code, 1))  # nothing known yet: start with round 1
             continue
         for n in range(1, c["rounds"] + 1):
             d = dates.get(n)
             if d is not None:
-                if today - timedelta(days=back) <= d <= today + timedelta(days=FIXTURE_DAYS):
+                if (today - timedelta(days=back) <= d <= today + timedelta(days=FIXTURE_DAYS)
+                        or (n in last and today - timedelta(days=1) <= last[n] <= today + timedelta(days=FIXTURE_DAYS))):
                     out.append((code, n))
             else:
                 # probe the next round once the latest known round has started (to learn its date);
@@ -310,7 +313,7 @@ def main():
     state.mkdir(parents=True, exist_ok=True)
     cdp = state / "cup_dates.json"
     learned = json.load(open(cdp)) if cdp.exists() else {}
-    rounds = cup_rounds_to_fetch(cups, learned, today)
+    rounds = cup_rounds_to_fetch(cups, learned, today, back=3)  # also the Wednesday of a Tuesday round, a day late
     lrounds = league_rounds_to_fetch(leagues, learned, today)
     if args.plan:
         files = [f"{dv}.txt" for dv, m in leagues.items() if "url" in m] + \
@@ -537,6 +540,7 @@ def main():
                 st["warnings"].append("onbekende ploegen overgeslagen: " + ", ".join(sorted(unknown)))
             if rows:
                 learned.setdefault(code, {})[str(n)] = str(min(r["date"] for r in rows))
+                learned.setdefault(code + "@last", {})[str(n)] = str(max(r["date"] for r in rows))
             known = {v["team"] for v in cup_alias.values()}
             fx = [r for r in rows if r["fh"] is None and today <= r["date"] <= today + timedelta(days=FIXTURE_DAYS)
                   and r["h"] in known and r["a"] in known]

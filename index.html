@@ -307,7 +307,15 @@ footer a { color: inherit }
   .tab { font-size: 15px; padding: 10px 8px }
 }
 @media (max-width: 420px) { .matchup { grid-template-columns: 1fr; } .side.away { text-align: left; justify-items: start } .side.away .team-select { text-align: left; text-align-last: left } .side.away .team-line { flex-direction: row } .vs { padding-top: 0 } }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+/* easter egg: type "sahur" or tap the logo three times */
+.tts { position: fixed; inset: 0; z-index: 99; display: grid; place-items: center; background: rgba(10,10,14,.92); cursor: pointer }
+.tts div { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; padding: 16px; font: 800 clamp(34px, 10vw, 96px)/1 var(--f-display); text-transform: uppercase; color: #fff; text-shadow: 0 3px 0 rgba(0,0,0,.5) }
+.tts span { opacity: 0; transform: scale(.4) }
+.tts span.on { opacity: 1; transform: scale(1); transition: transform .12s cubic-bezier(.3,1.8,.5,1), opacity .08s }
+.tts span.sahur { flex-basis: 100%; text-align: center; color: var(--accent) }
+.tts.shake div { animation: ttsShake .12s 3 }
+@keyframes ttsShake { 0%, 100% { transform: translateX(0) } 25% { transform: translateX(-6px) rotate(-1deg) } 75% { transform: translateX(6px) rotate(1deg) } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } .tts.shake div { animation: none } }
 </style>
 </head>
 <body>
@@ -2086,6 +2094,39 @@ const HIST = {"reality":{"o15":{"label":"Meer dan 1.5 goals","overall":0.7427,"b
   setLeague("B1");
   renderSlip();
   renderPlBar();
+  // easter egg
+  (function () {
+    let typed = "", taps = [], busy = false, ac = null;
+    const knock = (t, f) => {
+      try {
+        ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "sine"; o.frequency.setValueAtTime(f, ac.currentTime + t); o.frequency.exponentialRampToValueAtTime(f * 0.55, ac.currentTime + t + 0.12);
+        g.gain.setValueAtTime(0.0001, ac.currentTime + t); g.gain.exponentialRampToValueAtTime(0.6, ac.currentTime + t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + t + 0.18);
+        o.connect(g).connect(ac.destination); o.start(ac.currentTime + t); o.stop(ac.currentTime + t + 0.2);
+      } catch (e) { /* no sound */ }
+    };
+    function go() {
+      if (busy) return; busy = true;
+      const el = document.createElement("div");
+      el.className = "tts"; el.setAttribute("role", "presentation");
+      el.innerHTML = `<div><span>Tung</span><span>Tung</span><span>Tung</span><span class="sahur">Sahur!</span></div>`;
+      document.body.appendChild(el);
+      const sp = el.querySelectorAll("span");
+      [0, 380, 760, 1250].forEach((ms, i) => setTimeout(() => { sp[i].classList.add("on"); el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake"); }, ms));
+      [0, 0.38, 0.76].forEach((t) => knock(t, 190)); knock(1.25, 120); knock(1.32, 95);
+      const close = () => { el.remove(); busy = false; };
+      el.addEventListener("click", close); setTimeout(close, 3200);
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.target.closest && e.target.closest("input, select, textarea")) return;
+      typed = (typed + (e.key || "")).toLowerCase().slice(-5);
+      if (typed === "sahur") { typed = ""; go(); }
+    });
+    const logo = document.querySelector(".brand .logo");
+    if (logo) logo.addEventListener("click", () => { const n = Date.now(); taps = taps.filter((x) => n - x < 1500).concat(n); if (taps.length >= 3) { taps = []; go(); } });
+  })();
   if (location.hash === "#kloppen-reeksen") setTab("hist");
   if (location.hash === "#historiek") setTab("log");
 })();

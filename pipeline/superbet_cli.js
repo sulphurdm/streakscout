@@ -153,7 +153,16 @@ if (!bjToday && !FINAL) {
     bjToday = Object.assign(bj, { name: "Betje van de dag", made: now, status: "bezig", legs_hit: 0, chosen_by: "model",
       legs: bj.legs.map((l) => Object.assign(l, { hit: null })) });
     bjMade = true;
-  } else bjToday = { day: today, none: true, made: now, note: bj.note, priced: bj.priced, candidates: bj.candidates };
+  } else {
+    // no betje with bookmaker odds (often there are none): the surest ±5x from today's matches with estimated odds,
+    // markets settled by the final score first, so there is a betje every day (the deep dive can replace it)
+    const fb = M.superbet(eng, data, hist, { from: today, to: today, after: now, target: 4.5, maxLegs: 4, minP: 0.6, skipDivs: failed, ids: CL_IDS });
+    if (fb.reached && fb.legs.length >= 2) {
+      bjToday = Object.assign(fb, { day: today, name: "Betje van de dag", made: now, status: "bezig", legs_hit: 0, chosen_by: "model", target: 5,
+        estimated: true, note: bj.note, legs: fb.legs.map((l) => Object.assign(l, { hit: null })) });
+      bjMade = true;
+    } else bjToday = { day: today, none: true, made: now, note: bj.note, priced: bj.priced, candidates: bj.candidates };
+  }
   for (const g of EU) if (prevDay[g.key]) { bjToday[g.key] = prevDay[g.key]; if (prevDay[g.key + "_note"]) bjToday[g.key + "_note"] = prevDay[g.key + "_note"]; }
   BJ.push(bjToday);
   BJ = BJ.slice(-60);
@@ -261,7 +270,7 @@ function writeDossier() {
   matches.sort((x, y) => x.priority - y.priority || (x.when < y.when ? -1 : 1));
   const weekMadeToday = !!(W && W.main && (W.main.made || "").startsWith(today));
   fs.writeFileSync(path.join(stateDir, "dossier.json"), JSON.stringify({ today, now, rules: {
-    betje: "2 tot 4 bets uit de matches van vandaag (rol 'kandidaat betje van de dag'), één per match, elke markt mag (uitslag, dubbele kans, goals, BTTS ja/nee, corners, kaarten, schoten); samen 4 tot 7,5x (mik op ±5x); enkel bets die je na je onderzoek 'sterk' of 'ok' vindt",
+    betje: "2 tot 4 bets uit de matches van vandaag (rol 'kandidaat betje van de dag'), één per match, elke markt mag (uitslag, dubbele kans, goals, BTTS ja/nee, corners, kaarten, schoten); samen 4 tot 7,5x (mik op ±5x); enkel bets die je na je onderzoek 'sterk' of 'ok' vindt. Er moet elke dag met matchen een betje zijn: ook als het onderzoek beperkt is, kies je het beste betje dat je kan maken (bij voorkeur markten die op de eindstand afgerekend worden)",
     cl: "Champions League-avond (enkel als er vandaag CL-matchen zijn): 1 tot 4 combi's uit de CL-matchen van vandaag (rol 'kandidaat CL-avond'), elk 2 tot 6 bets, één per match, samen minstens 5x (hoogstens 40x), enkel markten die op de eindstand afgerekend worden (uitslag, dubbele kans, goals, BTTS, scoren, nul houden), enkel bets die je 'sterk' of 'ok' vindt; de odds zijn geschat. Spreiden: dezelfde bet, of een bet die op hetzelfde neerkomt (bv. 'Porto wint of gelijk' en 'Porto scoort': allebei moet Porto het goed doen; BTTS telt voor beide ploegen en voor goals), staat nooit in alle combi's tegelijk; een match mag wel in meerdere combi's met een andere bet. Ook als het onderzoek beperkt is: maak de combi's toch, met de beste info die je hebt",
     el: "Europa League-avond (enkel als er vandaag EL-matchen zijn): dezelfde regels als de Champions League-avond, maar enkel met de EL-matchen van vandaag (rol 'kandidaat EL-avond')",
     ecl: "Conference League-avond (enkel als er vandaag ECL-matchen zijn): dezelfde regels als de Champions League-avond, maar enkel met de ECL-matchen van vandaag (rol 'kandidaat ECL-avond')",

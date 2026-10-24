@@ -176,6 +176,12 @@ button, input, select { font: inherit; color: inherit }
 .leg-st.ko { background: var(--bad); color: var(--surface) }
 .leg-st.vd { background: var(--sunk); color: var(--muted) }
 .leg-st.op { box-shadow: inset 0 0 0 1.5px var(--line) }
+.leg-st.live { box-shadow: inset 0 0 0 2px var(--warn); animation: lvPulse 1.6s ease-in-out infinite }
+.leg-st.live.up { box-shadow: inset 0 0 0 2px var(--hit) }
+.lv { font: 600 11px/1 var(--f-mono); color: var(--muted); margin-left: 6px; white-space: nowrap }
+.lv.on { color: var(--bad) } .lv.on::before { content: "● "; animation: lvPulse 1.6s ease-in-out infinite }
+.lv:empty { display: none }
+@keyframes lvPulse { 50% { opacity: .35 } }
 .combo.super .score { font-weight: 600; color: var(--ink) }
 .sb-status { font-weight: 600 }
 .sb-status.won { color: var(--hit) } .sb-status.lost { color: var(--bad) }
@@ -1747,7 +1753,7 @@ const HIST = {"reality":{"o15":{"label":"Meer dan 1.5 goals","overall":0.7427,"b
       <p><b>Deep dive.</b> Daarna onderzoekt Claude elke kandidaat-match van die dag en elke bet van de week die vandaag of morgen gespeeld wordt op het web, bij betrouwbare bronnen (officiële clubs en competities, grote sportmedia, statistiek- en blessuresites): vorm in alle competities, onderlinge duels, blessures en schorsingen, verwachte opstelling, scheidsrechter en kaarten, context (stand, belang, vermoeidheid). Met de cijfers van het model als vertrekpunt redeneert Claude over alle markten (uitslag, goals, BTTS, corners, kaarten, schoten) en kiest het betje zelf; elke bet krijgt een oordeel (sterk, ok, riskant of afgeraden), een uitleg en de bronnen. De superbet van de week verandert na de dag waarop hij gemaakt is niet meer: daar is het onderzoek enkel een beoordeling. Komt de keuze van Claude niet door de controle (verkeerd aantal bets, totale odd buiten ±4–7,5x, een bet die het onderzoek zelf afraadt), dan blijft het voorstel van het model staan.</p>
       <p><b>Champions League-avond.</b> Op elke dag met Champions League-matchen staan er bovenaan Beste bets combi's van minstens 5x uit enkel de CL-matchen van die dag: twee betjes zonder gemeenschappelijke match en een knaller van 10x of meer. Na de deep dive op elke CL-match kiest Claude ze zelf (1 tot 4 combi's), met het model als vertrekpunt. Gespreid: dezelfde bet, of een bet die op hetzelfde neerkomt (zoals 'Porto wint of gelijk' en 'Porto scoort'), staat nooit in alle CL-betjes tegelijk, zodat één slechte match niet alles kapotmaakt; een match mag wel in meerdere betjes met een andere bet. Enkel markten die op de eindstand afgerekend worden; de odds zijn geschat, want voor de bekers hebben we geen bookmakerodds. Hetzelfde op elke dag met Europa League- of Conference League-matchen (Europa League-avond, Conference League-avond), met daarbij één <b>Europese safe combi</b> van ±2 à 3x uit de EL- en ECL-matchen samen, met de bets die het zekerst lijken.</p>
       <p><b>BTTS.</b> "Beide teams scoren: ja/nee" is een gewone markt, net als 1X of over 2.5: hij mag in de superbet (vanaf dezelfde minimumkans als de andere bets; BTTS-reeksen zijn wel zwakker, dus het signaal telt daar niet mee) en in het betje als Claude hem na de deep dive goed vindt. Bookmakerodds voor BTTS hebben we niet: die odds zijn geschat.</p>
-      <p><b>Afrekenen.</b> Uitslag- en goalbets worden afgerekend op de eindstand; corners, kaarten (geel + rood), schoten en ruststanden op de matchstatistieken van football-data.co.uk, die een paar dagen later binnenkomen. Komen die er na 12 dagen niet, dan vervalt de bet.</p>
+      <p><b>Afrekenen.</b> Uitslag- en goalbets worden afgerekend op de eindstand; corners, kaarten (geel + rood), schoten en ruststanden op de matchstatistieken van football-data.co.uk, die een paar dagen later binnenkomen. Komen die er na 12 dagen niet, dan vervalt de bet.</p><p><b>Live.</b> Tijdens de matchen vraagt je browser elke minuut de live-stand op bij ESPN (een gratis openbare livescorebron). Bij elke bet zie je de stand en de minuut. Een bet krijgt al ✓ of ✗ zodra de stand hem beslist (bv. over 2.5 is binnen bij het derde doelpunt, een thuiszege na het eindsignaal), en de combi staat meteen op gewonnen of verloren. Kaarten, corners en schoten zitten niet in de live-stand: die worden pas bij de update van de volgende ochtend afgerekend, net als de officiële winst en verlies in de Historiek.</p>
       <p><b>Odds.</b> Voor 1X2 en over/under 2.5 toont de app bookmakerodds van football-data.co.uk (onder meer Bet365, Pinnacle en de gemiddelde en hoogste marktprijs) en van The Odds API (onder meer Unibet, Pinnacle en William Hill). Odds van Belgische bookmakers zoals Napoleon zijn niet vrij beschikbaar; de beste gevonden prijs krijg je daar dus niet altijd. De marktkans is de kans die de odds van Pinnacle (of het marktgemiddelde) impliceren na het wegnemen van de marge.</p>
       <p><b>Data.</b> Uitslagen, corners, kaarten en odds van football-data.co.uk via de open dataset Club-Football-Match-Data, Elo van ClubElo. Die dataset wordt maar een paar keer per jaar bijgewerkt. Daarom komen recente uitslagen en het speelschema elke ochtend van voetbalkrant.com. Elke update wordt eerst gecontroleerd tegen de matchen die al bekend zijn; klopt er iets niet, dan blijft die competitie op de vorige stand. Die recente uitslagen bevatten enkel goals, dus corners en kaarten lopen achter. Elo-sterkte van ClubElo tot 1 september, daarna na elke uitslag bijgewerkt met de Elo-formule (t/m ${fmtISO(DATA.eloDate)}).</p>`;
   }
@@ -1793,19 +1799,14 @@ const HIST = {"reality":{"o15":{"label":"Meer dan 1.5 goals","overall":0.7427,"b
     const lname = (d) => (DATA.divNames[d] || (DATA.cups[d] && DATA.cups[d].name) || d);
     const nm = (t) => DISPLAY[t] || t;
     const oddTxt = (l) => (l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}${l.derived ? " (afgeleid)" : ""}` : `±${l.odd.toFixed(2)} geschat`);
-    const icon = (l) => (l.hit === 1 ? `<span class="leg-st ok" title="gewonnen">✓</span>` : l.hit === 0 ? `<span class="leg-st ko" title="verloren">✗</span>`
-      : l.hit === "void" ? `<span class="leg-st vd" title="vervallen (geen uitslag)">–</span>` : `<span class="leg-st op" title="nog te spelen"></span>`);
     const altTxt = (l) => {
       if (!l.alt || l.hit != null || b.status !== "bezig") return "";
       const short = l.alt.id.startsWith("nolose") ? (l.alt.id.endsWith("@H") ? "1X" : "X2") : l.alt.id.startsWith("win") ? "winst" : l.alt.label;
       return `<span class="alt">liever dan ${esc(short)}: ${pct(l.alt.p)} kans voor ${l.alt.priced ? "" : "±"}${l.alt.odd.toFixed(2)}</span>`;
     };
-    const legs = b.legs.map((l) => `<li>${icon(l)}<span><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""} · ${pct(l.p)} · ${oddTxt(l)}</small>${altTxt(l)}</span></li>`).join("");
-    const n = b.legs.length, hit = b.legs.filter((l) => l.hit === 1).length, open = b.legs.filter((l) => l.hit == null).length;
-    const st = b.status === "gewonnen" ? `<span class="sb-status won">Gewonnen! ${hit} van ${n} binnen</span>`
-      : b.status === "verloren" ? `<span class="sb-status lost">Verloren${b.lost_on ? ` bij ${esc(b.lost_on)}` : ""}</span>`
-      : b.status === "vervallen" ? `<span class="sb-status">Vervallen: geen enkele match gespeeld</span>`
-      : `<span class="sb-status">${hit ? `${hit} van ${n} al binnen, ` : ""}nog ${open} te spelen</span>`;
+    const legs = b.legs.map((l) => `<li>${legIcon(l)}<span><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""}${liveBadge(l)} · ${pct(l.p)} · ${oddTxt(l)}</small>${altTxt(l)}</span></li>`).join("");
+    const n = b.legs.length;
+    const st = betStatus(b);
     const one = Math.round(1 / b.p);
     const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
     const sum = `<span>${st}</span><span>Combi-odd <b>${b.odds.toFixed(2)}</b>${b.allPriced ? "" : " (deels geschat)"}</span><span>Kans volgens reeksen <b>${(b.p * 100).toFixed(1)}%</b> (1 op ${one})</span>${canAdd ? `<button class="go" data-sb="${key}">Zet in combi</button>` : ""}`;
@@ -1842,15 +1843,156 @@ const HIST = {"reality":{"o15":{"label":"Meer dan 1.5 goals","overall":0.7427,"b
       `<li><b>${esc(nm(l.h))} – ${esc(nm(l.a))} · ${esc(l.label)}</b>${l.reason ? `<br><span class="pick">${esc(l.reason)}</span>` : ""}${l.why ? `<br>${esc(l.why)}` : ""}${researchHTML(l)}</li>`).join("")}</ul>
       ${L.length < (b.legs || []).length ? `<p class="note">Bets zonder uitleg waren al begonnen toen de uitleg werd toegevoegd.</p>` : ""}</details>`;
   }
-  const legIcon = (l) => (l.hit === 1 ? `<span class="leg-st ok" title="gewonnen">✓</span>` : l.hit === 0 ? `<span class="leg-st ko" title="verloren">✗</span>`
-    : l.hit === "void" ? `<span class="leg-st vd" title="vervallen (geen uitslag)">–</span>` : `<span class="leg-st op" title="nog te spelen"></span>`);
-  const betStatus = (b) => {
-    const n = b.legs.length, hit = b.legs.filter((l) => l.hit === 1).length, open = b.legs.filter((l) => l.hit == null).length;
-    return b.status === "gewonnen" ? `<span class="sb-status won">Gewonnen! ${hit} van ${n} binnen</span>`
-      : b.status === "verloren" ? `<span class="sb-status lost">Verloren${b.lost_on ? ` bij ${esc(b.lost_on)}` : ""}</span>`
-      : b.status === "vervallen" ? `<span class="sb-status">Vervallen: geen enkele match gespeeld</span>`
-      : `<span class="sb-status">${hit ? `${hit} van ${n} al binnen, ` : ""}nog ${open} te spelen</span>`;
+  // ---------- live scores: the viewer's browser asks ESPN's public scoreboard every minute while a match of a bet is on ----------
+  // Only for display: a leg gets a provisional ✓/✗ as soon as the live score decides it (official settlement stays in the morning update).
+  const ESPN = { E0: "eng.1", E1: "eng.2", SP1: "esp.1", D1: "ger.1", I1: "ita.1", F1: "fra.1", N1: "ned.1", P1: "por.1", SC0: "sco.1",
+    T1: "tur.1", G1: "gre.1", B1: "bel.1", USA: "usa.1", CL: "uefa.champions", EL: "uefa.europa", ECL: "uefa.europa.conf" };
+  const TEAM_ALIAS = { "Man United": "manchester united", "Man City": "manchester city", "Nott'm Forest": "nottingham forest",
+    "M'gladbach": "monchengladbach", "Ein Frankfurt": "eintracht frankfurt", "Sp Lisbon": "sporting", "Ath Madrid": "atletico madrid",
+    "Ath Bilbao": "athletic", "Sociedad": "real sociedad", "Paris SG": "paris saint germain", "Buyuksehyr": "basaksehir",
+    "Sp Braga": "braga", "Guimaraes": "vitoria guimaraes", "Bodø Glimt": "bodo glimt", "Betis": "real betis", "Inter": "internazionale",
+    "St Truiden": "sint truiden", "St. Gilloise": "union saint gilloise", "PSV Eindhoven": "psv", "Bialystok": "jagiellonia",
+    "Dortmund": "borussia dortmund", "Leverkusen": "bayer leverkusen", "Wolves": "wolverhampton", "Sheffield Weds": "sheffield wednesday",
+    "QPR": "queens park rangers", "West Brom": "west bromwich", "Celta": "celta vigo", "Vallecano": "rayo vallecano",
+    "Espanol": "espanyol", "La Coruna": "deportivo", "Mainz": "mainz 05", "FC Koln": "koln", "Hamburg": "hamburger",
+    "Lillestrøm SK": "lillestrom", "Viking FK": "viking", "LASK Linz": "lask", "RB Leipzig": "rb leipzig", "AEK": "aek athens",
+    "Olympiakos": "olympiacos", "Sparta Praag": "sparta prague", "Slavia Praag": "slavia prague", "Rode Ster Belgrado": "red star",
+    "FC Kopenhagen": "copenhagen", "Red Bull Salzburg": "salzburg", "Dinamo Zagreb": "dinamo zagreb", "Nijmegen": "nec",
+    "Go Ahead Eagles": "go ahead eagles", "For Sittard": "fortuna sittard", "Den Haag": "den haag", "Waregem": "zulte waregem",
+    "Oud-Heverlee Leuven": "oh leuven", "RAAL La Louviere": "la louviere", "Beveren": "beveren", "Standard": "standard liege",
+    "St Johnstone": "st johnstone", "Dundee United": "dundee united", "Hearts": "heart of midlothian" };
+  const STOP = new Set(["fc", "afc", "cf", "sc", "ac", "as", "ssc", "club", "cd", "ud", "sd", "fk", "nk", "sk", "kv", "krc", "kaa", "rsc",
+    "cp", "bk", "if", "ik", "vfl", "vfb", "tsg", "de", "the", "1899", "1907", "1909", "1913", "sv", "rc", "rcd", "calcio", "us", "aj", "ogc", "osc", "stade"]);
+  const toks = (x) => String(x || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/ø/g, "o").toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w && !STOP.has(w));
+  const simT = (ours, theirs) => {
+    let best = 0;
+    for (const c of [ours, TEAM_ALIAS[ours], DISPLAY[ours]].filter(Boolean)) {
+      const A = toks(c), B = toks(theirs);
+      if (!A.length || !B.length) continue;
+      const a = A.join(" "), b = B.join(" ");
+      if (a === b) return 1;
+      if (b.includes(a) || a.includes(b)) best = Math.max(best, 0.9);
+      const inter = A.filter((w) => B.includes(w) || B.some((v) => v.length > 3 && w.length > 3 && (v.startsWith(w) || w.startsWith(v)))).length;
+      best = Math.max(best, inter / Math.min(A.length, B.length));
+    }
+    return best;
   };
+  const LIVE = {}; // "div|h|a|date" -> {state: "pre" | "in" | "post", clock, fh, fa}
+  let liveFail = 0, liveTimer = null;
+  const mkey = (l) => `${l.div}|${l.h}|${l.a}|${String(l.when || "").slice(0, 10)}`;
+  const legKey = (l) => `${mkey(l)}|${l.id}`;
+  const SCORE_RULE = { "win@H": (h, a) => h > a, "win@A": (h, a) => a > h, draw: (h, a) => h === a, "nolose@H": (h, a) => h >= a,
+    "nolose@A": (h, a) => a >= h, "12": (h, a) => h !== a, o15: (h, a) => h + a >= 2, o25: (h, a) => h + a >= 3, o35: (h, a) => h + a >= 4,
+    u25: (h, a) => h + a <= 2, u35: (h, a) => h + a <= 3, btts: (h, a) => h > 0 && a > 0, bttsno: (h, a) => !(h > 0 && a > 0),
+    "sc1@H": (h) => h >= 1, "sc1@A": (h, a) => a >= 1, "sc2@H": (h) => h >= 2, "sc2@A": (h, a) => a >= 2, "cs@H": (h, a) => a === 0, "cs@A": (h) => h === 0 };
+  // decided before the end: goals cannot be taken back
+  const EARLY = { o15: 1, o25: 1, o35: 1, btts: 1, "sc1@H": 1, "sc1@A": 1, "sc2@H": 1, "sc2@A": 1, u25: 0, u35: 0, bttsno: 0, "cs@H": 0, "cs@A": 0 };
+  function liveOf(l) {
+    // {hit: 1|0|null (decided by the live score), now: 1|0|null (if it ended now), m: the live match} for a leg not settled yet
+    const m = LIVE[mkey(l)], rule = SCORE_RULE[l.id];
+    if (!m || (m.state !== "in" && m.state !== "post") || !rule) return { hit: null, now: null, m };
+    const now = rule(m.fh, m.fa) ? 1 : 0;
+    if (m.state === "post") return { hit: now, now, m };
+    return { hit: l.id in EARLY && now === EARLY[l.id] ? now : null, now, m };
+  }
+  const effHit = (l) => (l.hit != null ? l.hit : liveOf(l).hit);
+  const legIcon = (l) => {
+    const k = esc(legKey(l));
+    if (l.hit === 1) return `<span class="leg-st ok" data-li="${k}" title="gewonnen">✓</span>`;
+    if (l.hit === 0) return `<span class="leg-st ko" data-li="${k}" title="verloren">✗</span>`;
+    if (l.hit === "void") return `<span class="leg-st vd" data-li="${k}" title="vervallen (geen uitslag)">–</span>`;
+    const v = liveOf(l);
+    if (v.hit === 1) return `<span class="leg-st ok" data-li="${k}" title="binnen volgens de live-stand (nog niet officieel)">✓</span>`;
+    if (v.hit === 0) return `<span class="leg-st ko" data-li="${k}" title="mis volgens de live-stand (nog niet officieel)">✗</span>`;
+    if (v.m && v.m.state === "post") return `<span class="leg-st op" data-li="${k}" title="gespeeld; deze markt (kaarten, corners, schoten) wordt bij de update van morgen afgerekend"></span>`;
+    if (v.m && v.m.state === "in") return `<span class="leg-st op live${v.now === 1 ? " up" : ""}" data-li="${k}" title="bezig: ${v.now === 1 ? "zit nu goed" : v.now === 0 ? "zit nu nog niet goed" : "loopt"}"></span>`;
+    return `<span class="leg-st op" data-li="${k}" title="nog te spelen"></span>`;
+  };
+  const liveBadge = (l) => {
+    const m = LIVE[mkey(l)], k = esc(mkey(l));
+    if (l.hit != null || !m || (m.state !== "in" && m.state !== "post")) return `<span class="lv" data-lv="${k}"></span>`;
+    return `<span class="lv${m.state === "in" ? " on" : ""}" data-lv="${k}">${m.state === "in" ? `LIVE ${esc(m.clock || "")}` : "eind"} ${m.fh}-${m.fa}</span>`;
+  };
+  const BET_REG = [];
+  const betStatus = (b) => {
+    let i = BET_REG.indexOf(b);
+    if (i < 0) { BET_REG.push(b); i = BET_REG.length - 1; }
+    const n = b.legs.length, eff = b.legs.map(effHit), hit = eff.filter((h) => h === 1).length, open = eff.filter((h) => h == null).length;
+    const liveLost = b.status === "bezig" && eff.some((h) => h === 0), liveWon = b.status === "bezig" && n && eff.every((h) => h === 1 || h === "void");
+    const stOf = (l, j) => (eff[j] == null ? (LIVE[mkey(l)] || {}).state : "");
+    const busy = b.legs.filter((l, j) => stOf(l, j) === "in").length, wait = b.legs.filter((l, j) => stOf(l, j) === "post").length, todo = open - busy - wait;
+    const lostLeg = b.legs.find((l, j) => eff[j] === 0);
+    return b.status === "gewonnen" ? `<span class="sb-status won" data-bs="${i}">Gewonnen! ${hit} van ${n} binnen</span>`
+      : b.status === "verloren" ? `<span class="sb-status lost" data-bs="${i}">Verloren${b.lost_on ? ` bij ${esc(b.lost_on)}` : ""}</span>`
+      : b.status === "vervallen" ? `<span class="sb-status" data-bs="${i}">Vervallen: geen enkele match gespeeld</span>`
+      : liveLost ? `<span class="sb-status lost" data-bs="${i}">Verloren volgens de live-stand${lostLeg ? ` bij ${esc(DISPLAY[lostLeg.h] || lostLeg.h)} – ${esc(DISPLAY[lostLeg.a] || lostLeg.a)}: ${esc(lostLeg.label)}` : ""} (morgen officieel)</span>`
+      : liveWon ? `<span class="sb-status won" data-bs="${i}">Gewonnen volgens de live-stand! ${hit} van ${n} binnen (morgen officieel)</span>`
+      : `<span class="sb-status" data-bs="${i}">${[hit ? `${hit} van ${n} al binnen` : "", busy ? `${busy} nu bezig` : "", wait ? `${wait} gespeeld, morgen afgerekend` : "", todo ? `nog ${todo} te spelen` : ""].filter(Boolean).join(", ")}</span>`;
+  };
+  function patchLive() {
+    // update icons, live scores and statuses in place (so open "Waarom deze bets?" sections stay open)
+    const legs = new Map();
+    for (const b of BET_REG) for (const l of b.legs) legs.set(legKey(l), l);
+    document.querySelectorAll("[data-li]").forEach((el) => { const l = legs.get(el.dataset.li); if (l) el.outerHTML = legIcon(l); });
+    document.querySelectorAll("[data-lv]").forEach((el) => {
+      const l = [...legs.values()].find((x) => mkey(x) === el.dataset.lv); if (l) el.outerHTML = liveBadge(l);
+    });
+    document.querySelectorAll("[data-bs]").forEach((el) => { const b = BET_REG[+el.dataset.bs]; if (b) el.outerHTML = betStatus(b); });
+  }
+  function liveLegs() {
+    const BJ = DATA.betje || {}, W = DATA.superbetWeek || {}, out = [];
+    const add = (b) => { if (b && b.status && b.status !== "bezig") return; for (const l of (b && !b.none && b.legs) || []) out.push(l); };
+    add(BJ.today); for (const g of EU_GROUPS) for (const c of (BJ.today && BJ.today[g.key]) || []) add(c); add(W.main); add(W.second);
+    const now = nowLocal(), since = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
+    return out.filter((l) => l.hit == null && ESPN[l.div] && l.when && l.when.slice(0, 10) >= since
+      && l.when <= new Date(Date.parse(now.replace(" ", "T") + ":00Z") + 20 * 6e4).toISOString().slice(0, 16).replace("T", " "));
+  }
+  async function pollLive() {
+    clearTimeout(liveTimer);
+    if (liveFail >= 3 || document.visibilityState === "hidden") return;
+    const legs = liveLegs();
+    if (!legs.length) { liveTimer = setTimeout(pollLive, 10 * 6e4); return; }
+    const want = new Map();
+    for (const l of legs) {
+      const d = l.when.slice(0, 10);
+      const days = l.div === "USA" ? [d, new Date(Date.parse(d + "T12:00:00Z") - 864e5).toISOString().slice(0, 10)] : [d];
+      for (const x of days) want.set(`${ESPN[l.div]}|${x}`, { slug: ESPN[l.div], day: x });
+    }
+    const events = [];
+    let got = 0, err = 0;
+    await Promise.all([...want.values()].map(async ({ slug, day }) => {
+      try {
+        const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${slug}/scoreboard?dates=${day.replace(/-/g, "")}&_=${Math.floor(Date.now() / 6e4)}`, { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        got++;
+        for (const e of j.events || []) {
+          const c = (e.competitions || [])[0] || {}, cs = c.competitors || [];
+          const H = cs.find((x) => x.homeAway === "home"), A = cs.find((x) => x.homeAway === "away"), st = (e.status || c.status || {}).type || {};
+          if (H && A) events.push({ slug, home: H.team || {}, away: A.team || {}, fh: +H.score || 0, fa: +A.score || 0, state: st.state === "post" && st.completed === false ? "off" : st.state,
+            clock: st.state === "in" ? (/^(HT|Half)/i.test(st.shortDetail || "") ? "rust" : (e.status || {}).displayClock || st.shortDetail || "") : "", detail: st.shortDetail || "" });
+        }
+      } catch (e) { err++; }
+    }));
+    if (!got && err) { if (++liveFail < 3) liveTimer = setTimeout(pollLive, 5 * 6e4); return; } // the live source cannot be reached from this page: show nothing
+    liveFail = 0;
+    for (const l of legs) {
+      let best = null, bs = 0;
+      for (const ev of events) {
+        if (ev.slug !== ESPN[l.div]) continue;
+        const nh = (t) => [t.displayName, t.shortDisplayName, t.name, t.location].filter(Boolean);
+        const sh = Math.max(...nh(ev.home).map((x) => simT(l.h, x))), sa = Math.max(...nh(ev.away).map((x) => simT(l.a, x)));
+        if (sh >= 0.5 && sa >= 0.5 && sh + sa > bs) { best = ev; bs = sh + sa; }
+      }
+      if (best) LIVE[mkey(l)] = { state: best.state, clock: best.clock, fh: best.fh, fa: best.fa };
+    }
+    patchLive();
+    const on = legs.some((l) => { const m = LIVE[mkey(l)]; return m && m.state === "in"; });
+    const soon = legs.some((l) => { const m = LIVE[mkey(l)]; return !m || m.state === "pre"; });
+    liveTimer = setTimeout(pollLive, on ? 60e3 : soon ? 3 * 6e4 : 15 * 6e4);
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") pollLive(); });
   // European nights: combis of at least 5x from the day's matches of one cup (Champions League, Europa League,
   // Conference League), and on Europa/Conference League days one safe combi from both
   const EU_GROUPS = [{ key: "cl", name: "Champions League-avond", tag: "CL" }, { key: "el", name: "Europa League-avond", tag: "EL" },
@@ -1866,7 +2008,7 @@ const HIST = {"reality":{"o15":{"label":"Meer dan 1.5 goals","overall":0.7427,"b
     const head = `<div class="combo-head"><h3>${esc(g.name)}</h3><span class="pl-meta">${esc(fmtISO(t.day))} · ${list.length} combi${list.length === 1 ? "" : "'s"} · ${meta}</span></div>`;
     if (!list.length) return `<div class="combo super">${head}<p class="note">Vanavond geen ${g.safe ? "safe combi" : `${g.tag}-betje`}: ${esc(t[key + "_note"] || "")}${recTxt}</p></div>`;
     const blocks = list.map((b, i) => {
-      const legs = b.legs.map((l) => `<li>${legIcon(l)}<span>${g.safe ? `<span class="lg">${esc(lname(l.div))}</span>` : ""}${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""} · ${pct(l.pb ?? l.p)} · ±${l.odd.toFixed(2)}</small></span></li>`).join("");
+      const legs = b.legs.map((l) => `<li>${legIcon(l)}<span>${g.safe ? `<span class="lg">${esc(lname(l.div))}</span>` : ""}${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""}${liveBadge(l)} · ${pct(l.pb ?? l.p)} · ±${l.odd.toFixed(2)}</small></span></li>`).join("");
       const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
       return `<div class="sub-combo"><h4>${esc(b.name)} · ${b.odds.toFixed(2)}x</h4><ol>${legs}</ol>
         <div class="combo-sum"><span>${betStatus(b)}</span><span>Kans <b>${(b.p * 100).toFixed(b.p < 0.1 ? 1 : 0)}%</b> (1 op ${Math.round(1 / b.p)})</span>${canAdd ? `<button class="go" data-sb="${key}.${i}">Zet in combi</button>` : ""}</div>
@@ -1890,14 +2032,9 @@ const HIST = {"reality":{"o15":{"label":"Meer dan 1.5 goals","overall":0.7427,"b
       return `<div class="combo super"><div class="combo-head"><h3>Betje van de dag</h3><span class="pl-meta">${b ? esc(fmtISO(b.day)) : ""}</span></div>
         <p class="note">${b && b.chosen_by === "claude" ? `Vandaag geen betje: na de deep dive vond Claude geen bets die goed genoeg zijn. ${esc(b.note || "")}` : `Vandaag geen betje${b && b.note ? `: ${esc(b.note)}` : ""}. Er komt er alleen een als er goede bets zijn met een mooie odd.`}</p>${recTxt ? `<p class="note">${recTxt}</p>` : ""}${hist}</div>`;
     }
-    const icon = (l) => (l.hit === 1 ? `<span class="leg-st ok" title="gewonnen">✓</span>` : l.hit === 0 ? `<span class="leg-st ko" title="verloren">✗</span>`
-      : l.hit === "void" ? `<span class="leg-st vd" title="vervallen (geen uitslag)">–</span>` : `<span class="leg-st op" title="nog te spelen"></span>`);
-    const legs = b.legs.map((l) => `<li>${icon(l)}<span><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""} · ${pct(l.pb ?? l.p)} · ${l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}${l.derived ? " (afgeleid)" : ""}` : `±${l.odd.toFixed(2)} geschat`}</small></span></li>`).join("");
-    const n = b.legs.length, hit = b.legs.filter((l) => l.hit === 1).length, open = b.legs.filter((l) => l.hit == null).length;
-    const st = b.status === "gewonnen" ? `<span class="sb-status won">Gewonnen! ${hit} van ${n} binnen</span>`
-      : b.status === "verloren" ? `<span class="sb-status lost">Verloren${b.lost_on ? ` bij ${esc(b.lost_on)}` : ""}</span>`
-      : b.status === "vervallen" ? `<span class="sb-status">Vervallen: geen enkele match gespeeld</span>`
-      : `<span class="sb-status">${hit ? `${hit} van ${n} al binnen, ` : ""}nog ${open} te spelen</span>`;
+    const legs = b.legs.map((l) => `<li>${legIcon(l)}<span><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""}${liveBadge(l)} · ${pct(l.pb ?? l.p)} · ${l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}${l.derived ? " (afgeleid)" : ""}` : `±${l.odd.toFixed(2)} geschat`}</small></span></li>`).join("");
+    const n = b.legs.length;
+    const st = betStatus(b);
     const ev = Math.round((b.p * b.odds - 1) * 100);
     const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
     const sum = `<span>${st}</span><span>Combi-odd <b>${b.odds.toFixed(2)}</b></span><span>Kans <b>${(b.p * 100).toFixed(0)}%</b> (1 op ${Math.round(1 / b.p)})</span><span>Verwachte opbrengst <b>${ev >= 0 ? "+" : "−"}${Math.abs(ev)}%</b></span>${canAdd ? `<button class="go" data-sb="betje">Zet in combi</button>` : ""}`;
@@ -2102,6 +2239,7 @@ const HIST = {"reality":{"o15":{"label":"Meer dan 1.5 goals","overall":0.7427,"b
   setLeague("B1");
   renderSlip();
   renderPlBar();
+  pollLive();
   // easter egg
   (function () {
     let typed = "", taps = [], busy = false, ac = null;

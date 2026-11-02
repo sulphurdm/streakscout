@@ -169,6 +169,7 @@ button, input, select { font: inherit; color: inherit }
 .leg-st.ko { background: var(--bad); color: var(--surface) }
 .leg-st.vd { background: var(--sunk); color: var(--muted) }
 .leg-st.op { box-shadow: inset 0 0 0 1.5px var(--line) }
+.combo-head h3 .ahead { font: 600 11px/1 var(--f-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--surface); background: var(--ink); border-radius: 999px; padding: 4px 8px; vertical-align: middle; margin-left: 6px }
 .leg-st.live { box-shadow: inset 0 0 0 2px var(--warn); animation: lvPulse 1.6s ease-in-out infinite }
 .leg-st.live.up { box-shadow: inset 0 0 0 2px var(--hit) }
 .lv { font: 600 11px/1 var(--f-mono); color: var(--muted); margin-left: 6px; white-space: nowrap }
@@ -1380,27 +1381,35 @@ const HIST = /*__HISTORY__*/null;
   // Conference League), and on Europa/Conference League days one safe combi from both
   const EU_GROUPS = [{ key: "cl", name: "Champions League-avond", tag: "CL" }, { key: "el", name: "Europa League-avond", tag: "EL" },
     { key: "ecl", name: "Conference League-avond", tag: "ECL" }, { key: "eusafe", name: "Europese safe combi", tag: "EL + ECL", safe: true }];
-  function euCardHTML(BJ, g) {
-    const t = BJ.today, key = g.key;
+  // a day relative to today: "vandaag", "morgen", "overmorgen" or the weekday
+  const dayWord = (d) => {
+    const n = Math.round((Date.parse(d + "T12:00:00Z") - Date.parse(nowLocal().slice(0, 10) + "T12:00:00Z")) / 864e5);
+    return n === 0 ? "vandaag" : n === 1 ? "morgen" : n === 2 ? "overmorgen" : ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"][new Date(d + "T12:00:00Z").getUTCDay()];
+  };
+  // up: a European night of a next day that was chosen in advance (DATA.betje.upcoming[ui])
+  function euCardHTML(BJ, g, up, ui) {
+    const t = up || BJ.today, key = g.key, dw = up ? dayWord(t.day) : "vandaag", Dw = dw[0].toUpperCase() + dw.slice(1);
     if (!t || (!(t[key] && t[key].length) && !t[key + "_note"])) return "";
     const nm = (x) => DISPLAY[x] || x, list = t[key] || [], rec = (BJ.euRecord && BJ.euRecord[key]) || (key === "cl" && BJ.clRecord) || { n: 0 };
     const lname = (d) => (DATA.divNames[d] || (DATA.cups[d] && DATA.cups[d].name) || d);
     const word = g.safe ? "safe combi's" : `${g.tag}-betjes`;
     const recTxt = rec.n ? ` Tot nu toe ${rec.won} van ${rec.n} ${word} gewonnen, ${rec.profit >= 0 ? "+" : "−"}${Math.abs(rec.profit).toFixed(2).replace(".", ",")} eenheden bij een inzet van 1 per combi.` : "";
-    const meta = g.safe ? "EL- en ECL-matchen van vandaag samen" : `enkel ${g.tag}-matchen van vandaag`;
-    const head = `<div class="combo-head"><h3>${esc(g.name)}</h3><span class="pl-meta">${esc(fmtISO(t.day))} · ${list.length} combi${list.length === 1 ? "" : "'s"} · ${meta}</span></div>`;
-    if (!list.length) return `<div class="combo super">${head}<p class="note">Vanavond geen ${g.safe ? "safe combi" : `${g.tag}-betje`}: ${esc(t[key + "_note"] || "")}${recTxt}</p></div>`;
+    const meta = g.safe ? `EL- en ECL-matchen van ${dw} samen` : `enkel ${g.tag}-matchen van ${dw}`;
+    const head = `<div class="combo-head"><h3>${esc(g.name)}${up ? ` <span class="ahead">${esc(Dw)}</span>` : ""}</h3><span class="pl-meta">${esc(fmtISO(t.day))} · ${list.length} combi${list.length === 1 ? "" : "'s"} · ${meta}</span></div>`;
+    if (!list.length) return `<div class="combo super">${head}<p class="note">${up ? `${esc(Dw)} 's avonds` : "Vanavond"} geen ${g.safe ? "safe combi" : `${g.tag}-betje`}: ${esc(t[key + "_note"] || "")}${recTxt}</p></div>`;
     const blocks = list.map((b, i) => {
       const legs = b.legs.map((l) => `<li>${legIcon(l)}<span>${g.safe ? `<span class="lg">${esc(lname(l.div))}</span>` : ""}${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""}${liveBadge(l)} · ${pct(l.pb ?? l.p)} · ±${l.odd.toFixed(2)}</small></span></li>`).join("");
       const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
       return `<div class="sub-combo"><h4>${esc(b.name)} · ${b.odds.toFixed(2)}x</h4><ol>${legs}</ol>
-        <div class="combo-sum"><span>${betStatus(b)}</span><span>Kans <b>${(b.p * 100).toFixed(b.p < 0.1 ? 1 : 0)}%</b> (1 op ${Math.round(1 / b.p)})</span>${canAdd ? `<button class="go" data-sb="${key}.${i}">Zet in combi</button>` : ""}</div>
+        <div class="combo-sum"><span>${betStatus(b)}</span><span>Kans <b>${(b.p * 100).toFixed(b.p < 0.1 ? 1 : 0)}%</b> (1 op ${Math.round(1 / b.p)})</span>${canAdd ? `<button class="go" data-sb="${up ? `u${ui}|` : ""}${key}.${i}">Zet in combi</button>` : ""}</div>
         ${whyHTML(b, "Waarom deze bets?", i === 0)}</div>`;
     }).join("");
     const byClaude = list.some((b) => b.chosen_by === "claude");
-    const rule = g.safe ? "Eén combi van ±2 à 3x uit de Europa League- en Conference League-matchen van vandaag samen, met de bets die het zekerst lijken."
-      : `Enkel matchen uit de ${esc(g.name.replace("-avond", ""))} van vandaag, elke combi minstens 5x; dezelfde bet (of een bet die op hetzelfde neerkomt) staat nooit in alle betjes tegelijk.`;
-    const note = `${byClaude ? "Gekozen door Claude na een deep dive op de matchen van vanavond, met de cijfers van het model als vertrekpunt." : "Het voorstel van het model."} ${rule} Enkel markten die op de eindstand afgerekend worden. Voor de bekers hebben we geen bookmakerodds: de odds zijn geschat (eerlijke odd min 5% marge). Hou de inzet klein.`;
+    const rule = g.safe ? `Eén combi van ±2 à 3x uit de Europa League- en Conference League-matchen van ${dw} samen, met de bets die het zekerst lijken.`
+      : `Enkel matchen uit de ${esc(g.name.replace("-avond", ""))} van ${dw}, elke combi minstens 5x; dezelfde bet (of een bet die op hetzelfde neerkomt) staat nooit in alle betjes tegelijk.`;
+    const early = list.some((b) => b.early);
+    const note = `${early ? `Al vooraf gekozen door Claude (op ${esc(fmtISO((list[0].made || "").slice(0, 10)))}), na een deep dive op deze matchen, met de cijfers van het model als vertrekpunt; deze combi's blijven staan, ook na de update van die ochtend. Kijk vlak voor de aftrap nog even naar de opstellingen.`
+      : byClaude ? "Gekozen door Claude na een deep dive op de matchen van vanavond, met de cijfers van het model als vertrekpunt." : "Het voorstel van het model."} ${rule} Enkel markten die op de eindstand afgerekend worden. Voor de bekers hebben we geen bookmakerodds: de odds zijn geschat (eerlijke odd min 5% marge). Hou de inzet klein.`;
     return `<div class="combo super cl">${head}${t[key + "_note"] ? `<p class="note"><b>Keuze van Claude:</b> ${esc(t[key + "_note"])}</p>` : ""}${blocks}<p class="note">${note}${recTxt}</p></div>`;
   }
   // Betje van de dag: ±5x from today's matches with real bookmaker odds, only legs with value
@@ -1431,7 +1440,12 @@ const HIST = /*__HISTORY__*/null;
   function renderSuper() {
     const W = DATA.superbetWeek, wrap = $("superWrap"), BJ = DATA.betje;
     const cards = [];
-    if (BJ) { for (const g of EU_GROUPS) { const c = euCardHTML(BJ, g); if (c) cards.push(c); } cards.push(betjeCardHTML(BJ)); }
+    if (BJ) {
+      for (const g of EU_GROUPS) { const c = euCardHTML(BJ, g); if (c) cards.push(c); }
+      cards.push(betjeCardHTML(BJ));
+      // European nights of the next days, already chosen in advance
+      (BJ.upcoming || []).forEach((x, ui) => { for (const g of EU_GROUPS) { const c = euCardHTML(BJ, g, x, ui); if (c) cards.push(c); } });
+    }
     if (W && W.main && W.main.legs && W.main.legs.length >= 2) {
       if (W.second) cards.push(superCardHTML(W.second, "second", W));
       cards.push(superCardHTML(W.main, "main", W));
@@ -1439,7 +1453,8 @@ const HIST = /*__HISTORY__*/null;
     }
     wrap.innerHTML = cards.join("");
     wrap.querySelectorAll("button[data-sb]").forEach((btn) => btn.addEventListener("click", () => {
-      const [k0, k1] = btn.dataset.sb.split("."), b0 = k0 === "betje" ? BJ.today : EU_GROUPS.some((g) => g.key === k0) ? BJ.today[k0] : W[k0], b = k1 ? b0[k1] : b0, nm = (t) => DISPLAY[t] || t;
+      const [k0, k1] = btn.dataset.sb.split("."), [uk, gk] = k0.includes("|") ? k0.split("|") : [null, k0];
+      const b0 = uk ? BJ.upcoming[+uk.slice(1)][gk] : k0 === "betje" ? BJ.today : EU_GROUPS.some((g) => g.key === k0) ? BJ.today[k0] : W[k0], b = k1 ? b0[k1] : b0, nm = (t) => DISPLAY[t] || t;
       for (const l of b.legs) {
         const k = `${l.mkey}|${l.id}`;
         if (!state.slip.some((x) => x.k === k)) state.slip.push({ k, match: l.mkey, label: `${nm(l.h)} – ${nm(l.a)}: ${l.label}`, p: l.pb ?? l.p });

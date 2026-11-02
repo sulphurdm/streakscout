@@ -238,6 +238,11 @@ def bets_report(state, out, today, report):
             pdays = [b for b in B if b.get("day", "") < str(today) and b.get(k)]
             if pdays:  # the combis of the last earlier day with this group
                 report["betje"]["previous_" + k] = [dict(_bet_txt(c), day=pdays[-1]["day"]) for c in pdays[-1][k]]
+        # European nights of the next days that were already chosen in advance
+        ahead = [b for b in B if b.get("day", "") > str(today) and any(b.get(k) for k in weekly.EU_KEYS)]
+        if ahead:
+            report["betje"]["ahead"] = [dict({"day": b["day"]}, **{k: [_bet_txt(c) for c in b[k]] for k in weekly.EU_KEYS if b.get(k)})
+                                        for b in ahead]
         if prev:
             y = prev[-1]
             report["betje"]["previous"] = {"day": y["day"], "odds": y["odds"], "status": y["status"],

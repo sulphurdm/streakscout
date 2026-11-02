@@ -277,8 +277,9 @@ function writeDossier() {
     eusafe: "Europese safe combi (enkel op een dag met EL- én ECL-matchen): precies 1 combi van 2 tot 4 bets uit de EL- en ECL-matchen van vandaag samen, minstens één uit elke competitie, samen 1,8 tot 3,5x (mik op ±2,5x); enkel markten die op de eindstand afgerekend worden en de bets die je het zekerst vindt (bij voorkeur 'sterk', nooit 'riskant' of 'afgeraden')",
     week: weekMadeToday ? "de superbet van de week is vandaag gemaakt: je mag hem nog aanpassen (2 tot 14 bets uit alle matches van deze week in het dossier, elke markt mag, ook BTTS; samen 15 tot 30x); daarna verandert hij niet meer" : "de weekbets liggen vast: enkel onderzoeken en beoordelen",
     current: { betje: bjToday && !bjToday.none ? bjToday.legs.map((l) => ({ key: keyOf(l), id: l.id })) : [],
-      ...Object.fromEntries(EU.map((g) => [g.key, ((bjToday && bjToday[g.key]) || []).map((c) => ({ name: c.name, odds: c.odds, legs: c.legs.map((l) => ({ key: keyOf(l), id: l.id })) }))])),
+      ...Object.fromEntries(EU.map((g) => [g.key, ((bjToday && bjToday[g.key]) || []).map((c) => ({ name: c.name, odds: c.odds, early: !!c.early, legs: c.legs.map((l) => ({ key: keyOf(l), id: l.id })) }))])),
     },
+    early: "Een Europese avond waarvan de combi's in 'current' \"early\": true hebben, is al vooraf gekozen (de dag ervoor, op vraag van de gebruiker, die er misschien al op ingezet heeft): die blijft staan. Zet die groep niet in choice.json; onderzoek de matchen wel en meld in je bericht als er nieuws is dat een bet ervan riskanter maakt.",
     week_made_today: weekMadeToday }, matches }, null, 1));
   return matches;
 }
@@ -362,6 +363,7 @@ if (FINAL) {
   for (const g of EU) {
     const ch = choice[g.key];
     if (!bjToday || !ch || !Array.isArray(ch.bets)) continue;
+    if ((bjToday[g.key] || []).some((c) => c.early)) { fin.choice[g.key] = "al vooraf gekozen: behouden"; continue; }
     if (!ch.bets.length && ch.reason) {
       bjToday[g.key] = [];
       bjToday[g.key + "_note"] = String(ch.reason).slice(0, 600);
@@ -381,6 +383,36 @@ if (FINAL) {
     if (shared) errs.push(shared);
     if (got.length && !errs.length) { bjToday[g.key] = got; bjToday[g.key + "_note"] = ch.reason ? String(ch.reason).slice(0, 800) : undefined; fin.choice[g.key] = `gebruikt (${got.length})`; }
     else fin.choice[g.key] = `niet gebruikt: ${errs.join("; ")}`;
+  }
+  // European nights of the next two days, chosen in advance: {"ahead": {"YYYY-MM-DD": {"cl": {...}, "el": ..., "ecl": ..., "eusafe": ...}}}
+  // (same rules as today's; stored on that day in betje.json with "early": true, so the run on that day keeps them)
+  const lastAhead = new Date(Date.parse(today + "T12:00:00Z") + 2 * 864e5).toISOString().slice(0, 10);
+  for (const [D, chs] of Object.entries(choice.ahead || {})) {
+    if (!(D > today && D <= lastAhead) || !chs || typeof chs !== "object") { fin.choice["ahead " + D] = "niet gebruikt: enkel de volgende twee dagen"; continue; }
+    const onDay = (divs) => data.fixtures.filter((f) => divs.includes(f.div) && f.when.slice(0, 10) === D);
+    for (const g of EU) {
+      const ch = chs[g.key];
+      if (!ch || !Array.isArray(ch.bets) || !ch.bets.length) continue;
+      let e = BJ.find((x) => x.day === D);
+      if ((e && e[g.key] || []).some((c) => c.early)) { fin.choice[`${g.key} ${D}`] = "al vooraf gekozen: behouden"; continue; }
+      const got = [], errs = [];
+      const opts = g.safe ? { min: 2, max: 4, lo: 1.8, hi: 3.5, day: D, ids: CL_IDS } : { min: 2, max: 6, lo: 5, hi: 40, day: D, ids: CL_IDS };
+      ch.bets.slice(0, g.safe ? 1 : 4).forEach((cb, i) => {
+        const [b, err] = applyChoice(g.key, cb, opts);
+        const divs = b ? new Set(b.legs.map((l) => l.div)) : null;
+        if (b && b.legs.every((l) => g.divs.includes(l.div)) && (!g.safe || g.divs.every((d) => divs.has(d) || !onDay([d]).length)))
+          got.push(Object.assign({ name: String(cb.name || (g.safe ? g.short : `${g.short} betje ${i + 1}`)).slice(0, 60), target: g.safe ? 2.2 : 5, made: now, decided: now, status: "bezig", legs_hit: 0, early: true }, b));
+        else errs.push(`${cb.name || i + 1}: ${err || (g.safe ? "minstens één EL- en één ECL-match, niets anders" : `enkel ${g.tag}-matchen`)}`);
+      });
+      const shared = !g.safe && got.length && !errs.length ? sharedCore(got, g.tag) : null;
+      if (shared) errs.push(shared);
+      if (got.length && !errs.length) {
+        if (!e) { e = { day: D, none: true, made: now, note: "nog geen betje" }; BJ.push(e); }
+        e[g.key] = got;
+        if (ch.reason) e[g.key + "_note"] = String(ch.reason).slice(0, 800);
+        fin.choice[`${g.key} ${D}`] = `gebruikt (${got.length})`;
+      } else fin.choice[`${g.key} ${D}`] = `niet gebruikt: ${errs.join("; ")}`;
+    }
   }
   // today's betje
   if (bjToday && choice.betje) {
@@ -402,10 +434,14 @@ if (FINAL) {
   if (W) { explain(W.main); explain(W.second); }
   if (bjToday) { explain(bjToday); for (const c of euCombis(bjToday)) explain(c); }
 }
+// European nights of the next days that were chosen in advance (shown on the page before their day)
+const upcoming = BJ.filter((x) => x.day > today && euCombis(x).length).sort((x, y) => (x.day < y.day ? -1 : 1));
+for (const x of upcoming) for (const c of euCombis(x)) explain(c);
 if (bjToday && !bjToday.none && !FINAL) bjToday.chosen_by = bjToday.chosen_by || "model";
 const dossier = writeDossier();
 fin.dossier = { matches: dossier.length, due: dossier.filter((m) => m.research_due).length };
 fs.writeFileSync(path.join(out, "finalize.json"), JSON.stringify(fin));
+BJ.sort((x, y) => (x.day < y.day ? -1 : x.day > y.day ? 1 : 0));
 BJ = BJ.slice(-60);
 fs.writeFileSync(betjeFile, JSON.stringify(BJ, null, 1));
 
@@ -413,6 +449,7 @@ fs.writeFileSync(betjeFile, JSON.stringify(BJ, null, 1));
 const shown = new Set();
 const mark = (b) => { for (const l of (b && !b.none && b.legs) || []) shown.add(keyOf(l)); if (b && b.btts) mark(b.btts); };
 mark(bjToday); for (const c of euCombis(bjToday)) mark(c); if (W) { mark(W.main); mark(W.second); }
+for (const x of upcoming) for (const c of euCombis(x)) mark(c);
 data.research = {};
 for (const k of shown) if (RESEARCH[k]) data.research[k] = RESEARCH[k];
 
@@ -435,6 +472,8 @@ for (const g of EU) {
     profit: Math.round(cdone.reduce((s, b) => s + (b.status === "gewonnen" ? effOdds(b) - 1 : -1), 0) * 100) / 100 };
 }
 data.betje.clRecord = data.betje.euRecord.cl;
+// European nights of the next days chosen in advance: {day, cl, cl_note, el, ...}
+data.betje.upcoming = upcoming.map((x) => Object.fromEntries([["day", x.day], ...EU.flatMap((g) => [[g.key, x[g.key]], [g.key + "_note", x[g.key + "_note"]]])].filter(([, v]) => v != null)));
 data.betje.euGroups = EU.map((g) => ({ key: g.key, name: g.name, tag: g.tag, safe: !!g.safe }));
 data.superbetWeek = W;
 delete data.superbet;

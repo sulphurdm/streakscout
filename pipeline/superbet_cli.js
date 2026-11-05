@@ -125,32 +125,38 @@ function euNight(g) {
 // (bjToday.leagues = {div: [combi, ...]}), shown on the page for the league that is picked; made once a day
 const WEEKEND = [5, 6, 0].includes(new Date(today + "T12:00:00Z").getUTCDay());
 const LEAGUE_DIVS = Object.keys(data.divNames || {});
-const LG_LO = 2.5, LG_HI = 8, LG_TARGET = 3.5;
+const LG_LO = 3.5, LG_HI = 6.5, LG_TARGET = 4.2;
 const leagueCombis = (t) => Object.values((t && t.leagues) || {}).flat();
-function leagueBetjes(div) {
-  const fx = data.fixtures.filter((f) => f.div === div && f.when.slice(0, 10) === today && f.when > now);
-  if (!fx.length) return [];
+// the Sunday that ends this weekend (Friday: +2 days, Saturday: +1, Sunday: today)
+const SUNDAY = new Date(Date.parse(today + "T12:00:00Z") + ((7 - new Date(today + "T12:00:00Z").getUTCDay()) % 7) * 864e5).toISOString().slice(0, 10);
+// markets for the league combis: score-settled, without draws, unders, clean sheets and BTTS-no (under 3.5 hit 62% against
+// 69% predicted in the track record; those markets are the most volatile)
+const LG_IDS = new Set([...CL_IDS].filter((id) => !["draw", "u25", "u35", "bttsno", "cs@H", "cs@A"].includes(id)));
+function leagueBetjes(div, avoid) {
+  // a combi of ±4-5x per league: from that league's matches of today; with too few of them (on Friday most leagues play
+  // only one match) from its matches of the rest of the weekend, up to Sunday
+  const upto = (to) => data.fixtures.filter((f) => f.div === div && f.when.slice(0, 10) >= today && f.when.slice(0, 10) <= to && f.when > now);
+  if (!upto(today).length) return [];
   const nm = data.divNames[div] || div;
-  const mk = (target, maxLegs, exclude, minP = 0.62) => M.superbet(eng, data, hist, { from: today, to: today, after: now, target, maxLegs, minP,
-    ids: CL_IDS, onlyDivs: new Set([div]), exclude });
-  const ok = (x) => x.reached && x.legs.length >= 2 && x.odds <= LG_HI;
-  const out = [];
-  if (fx.length === 1) {
-    // only one match of this league today (often on Friday): its strongest bet as a single
-    const s = mk(1.25, 1, undefined, 0.6);
-    if (s.reached && s.legs.length === 1) { out.push(Object.assign(stamp(s, `Bet ${nm}`), { single: true, chosen_by: "model", target: 1.35 })); }
-    return out;
-  }
-  let a = mk(LG_TARGET, 5);
-  if (!ok(a)) a = mk(2.5, 3);
-  if (!ok(a)) a = mk(1.8, 3, undefined, 0.6); // few matches left: a smaller betje
-  if (ok(a)) out.push(stamp(a, `Betje ${nm}`));
-  if (out.length && fx.length >= 5) {
-    // a second betje from the other matches of that league (no match in both)
-    const b = mk(LG_TARGET, 5, new Set(out[0].legs.map((l) => l.h + "|" + l.a)));
+  // "wint of gelijk" for the away team hit 66% against 71% predicted in the track record: only when the model gives it 70%+
+  const mk = (target, maxLegs, to, exclude, minP = 0.64) => M.superbet(eng, data, hist, { from: today, to, after: now, target, maxLegs, minP,
+    minPBy: { "nolose@A": 0.7 }, ids: LG_IDS, onlyDivs: new Set([div]), exclude: exclude || avoid });
+  const ok = (x) => x && x.reached && x.legs.length >= 2 && x.odds >= LG_LO && x.odds <= LG_HI;
+  let to = today, a = upto(today).length >= 3 ? mk(LG_TARGET, 5, today) : null;
+  if (!ok(a)) { to = SUNDAY; a = mk(LG_TARGET, 5, to); }
+  if (!ok(a)) a = mk(LG_TARGET, 6, to); // 4x+ with one bet more
+  if (!ok(a)) a = mk(LG_LO, 5, to, undefined, 0.62); // no weaker bets than that: then no betje for this league
+  if (!ok(a)) return [];
+  const out = [stamp(a, `Betje ${nm}`)];
+  if (upto(to).length >= 6) {
+    // a second combi from the other matches (no match in both)
+    const b = mk(LG_TARGET, 5, to, new Set([...(avoid || []), ...a.legs.map((l) => l.h + "|" + l.a)]));
     if (ok(b)) { out[0].name = `Betje ${nm} 1`; out.push(stamp(b, `Betje ${nm} 2`)); }
   }
-  for (const x of out) { x.chosen_by = "model"; x.target = LG_TARGET; x.legs.sort((p, q) => (p.when < q.when ? -1 : 1)); }
+  for (const x of out) {
+    x.chosen_by = "model"; x.target = LG_TARGET; x.legs.sort((p, q) => (p.when < q.when ? -1 : 1));
+    if (x.legs.some((l) => l.when.slice(0, 10) !== today)) x.span = x.legs[x.legs.length - 1].when.slice(0, 10);
+  }
   return out;
 }
 // a match that is also in the betje van de dag gets the same bet in a league betje (no "1X" here and "X2" there)
@@ -225,7 +231,15 @@ if (!FINAL && betjeFile && WEEKEND) {
   const L = bjToday.leagues || {};
   for (const div of LEAGUE_DIVS) {
     if ((L[div] && L[div].length) || failed.includes(div)) continue;
-    const x = leagueBetjes(div).map((c) => alignWithBetje(c, bjToday));
+    // spread over the weekend: matches already in an open betje of this league from an earlier day are left out (if possible)
+    const before = new Set(BJ.filter((y) => y.day < today && y.day >= new Date(Date.parse(today + "T12:00:00Z") - 2 * 864e5).toISOString().slice(0, 10))
+      .flatMap((y) => ((y.leagues || {})[div] || []).filter((c) => c.status === "bezig").flatMap((c) => c.legs.filter((l) => l.hit == null).map((l) => l.h + "|" + l.a))));
+    // and the matches of the betje van de dag too, so one bad match does not sink both (only if that still gives a betje)
+    const inBetje = new Set(((bjToday && !bjToday.none && bjToday.legs) || []).map((l) => l.h + "|" + l.a));
+    // never a copy of a combi that is still running from an earlier weekend day: then that one stays the league's betje
+    let x = leagueBetjes(div, new Set([...before, ...inBetje]));
+    if (!x.length) x = leagueBetjes(div, before.size ? before : undefined);
+    x = x.map((c) => alignWithBetje(c, bjToday));
     if (x.length) L[div] = x;
   }
   bjToday.leagues = L;
@@ -473,13 +487,13 @@ if (FINAL) {
     }
   }
   // league betjes (weekend): {"leagues": {"E0": {"bets": [{name, legs: [{key, id, reason}], reason}], "reason"}}}: 1 or 2 per league,
-  // only that league's matches of today, 2 to 5 bets, 2.5 to 8x; replaces the model's betjes of that league
+  // only that league's matches from today up to Sunday, 2 to 5 bets, 3.5 to 6.5x; replaces the model's betjes of that league
   for (const [div, ch] of Object.entries(choice.leagues || {})) {
     if (!bjToday || !LEAGUE_DIVS.includes(div) || !ch || !Array.isArray(ch.bets) || !ch.bets.length) continue;
     if (((bjToday.leagues || {})[div] || []).some((c) => c.early)) { fin.choice[`leagues ${div}`] = "al vooraf gemaakt: behouden"; continue; }
     const got = [], errs = [];
     ch.bets.slice(0, 2).forEach((cb, i) => {
-      const [b, err] = applyChoice(`leagues.${div}`, cb, { min: 1, max: 5, lo: cb.legs && cb.legs.length === 1 ? 1.2 : LG_LO, hi: LG_HI, day: today });
+      const [b, err] = applyChoice(`leagues.${div}`, cb, { min: 2, max: 6, lo: LG_LO, hi: LG_HI, weekFrom: today, to: SUNDAY });
       if (b && b.legs.every((l) => l.div === div))
         got.push(Object.assign({ name: String(cb.name || `Betje ${data.divNames[div]}${ch.bets.length > 1 ? " " + (i + 1) : ""}`).slice(0, 60), target: LG_TARGET, made: now, decided: now, status: "bezig", legs_hit: 0 }, b));
       else errs.push(`${cb.name || i + 1}: ${err || "enkel matchen van die competitie"}`);
@@ -557,6 +571,11 @@ data.betje.clRecord = data.betje.euRecord.cl;
   data.betje.leagueRecord = { n: L.length, won: L.filter((c) => c.status === "gewonnen").length,
     profit: Math.round(L.reduce((s, c) => s + (c.status === "gewonnen" ? eff(c) - 1 : -1), 0) * 100) / 100 };
   data.betje.weekend = WEEKEND;
+  // league combis of an earlier day of this weekend that are still running (shown with the league's betje)
+  const from2 = new Date(Date.parse(today + "T12:00:00Z") - 2 * 864e5).toISOString().slice(0, 10);
+  data.betje.leagueOpen = {};
+  for (const y of BJ.filter((y) => y.day < today && y.day >= from2 && y.leagues))
+    for (const [dv, cs] of Object.entries(y.leagues)) for (const c of cs) if (c.status === "bezig") (data.betje.leagueOpen[dv] = data.betje.leagueOpen[dv] || []).push(Object.assign({ day: y.day }, c));
 }
 // European nights of the next days chosen in advance: {day, cl, cl_note, el, ...}
 data.betje.upcoming = upcoming.map((x) => Object.fromEntries([["day", x.day], ...EU.flatMap((g) => [[g.key, x[g.key]], [g.key + "_note", x[g.key + "_note"]]])].filter(([, v]) => v != null)));

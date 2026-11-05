@@ -121,6 +121,50 @@ function euNight(g) {
   return out;
 }
 
+// Weekend (Friday, Saturday, Sunday): one or two betjes per league from that league's matches of the day
+// (bjToday.leagues = {div: [combi, ...]}), shown on the page for the league that is picked; made once a day
+const WEEKEND = [5, 6, 0].includes(new Date(today + "T12:00:00Z").getUTCDay());
+const LEAGUE_DIVS = Object.keys(data.divNames || {});
+const LG_LO = 2.5, LG_HI = 8, LG_TARGET = 3.5;
+const leagueCombis = (t) => Object.values((t && t.leagues) || {}).flat();
+function leagueBetjes(div) {
+  const fx = data.fixtures.filter((f) => f.div === div && f.when.slice(0, 10) === today && f.when > now);
+  if (!fx.length) return [];
+  const nm = data.divNames[div] || div;
+  const mk = (target, maxLegs, exclude, minP = 0.62) => M.superbet(eng, data, hist, { from: today, to: today, after: now, target, maxLegs, minP,
+    ids: CL_IDS, onlyDivs: new Set([div]), exclude });
+  const ok = (x) => x.reached && x.legs.length >= 2 && x.odds <= LG_HI;
+  const out = [];
+  if (fx.length === 1) {
+    // only one match of this league today (often on Friday): its strongest bet as a single
+    const s = mk(1.25, 1, undefined, 0.6);
+    if (s.reached && s.legs.length === 1) { out.push(Object.assign(stamp(s, `Bet ${nm}`), { single: true, chosen_by: "model", target: 1.35 })); }
+    return out;
+  }
+  let a = mk(LG_TARGET, 5);
+  if (!ok(a)) a = mk(2.5, 3);
+  if (!ok(a)) a = mk(1.8, 3, undefined, 0.6); // few matches left: a smaller betje
+  if (ok(a)) out.push(stamp(a, `Betje ${nm}`));
+  if (out.length && fx.length >= 5) {
+    // a second betje from the other matches of that league (no match in both)
+    const b = mk(LG_TARGET, 5, new Set(out[0].legs.map((l) => l.h + "|" + l.a)));
+    if (ok(b)) { out[0].name = `Betje ${nm} 1`; out.push(stamp(b, `Betje ${nm} 2`)); }
+  }
+  for (const x of out) { x.chosen_by = "model"; x.target = LG_TARGET; x.legs.sort((p, q) => (p.when < q.when ? -1 : 1)); }
+  return out;
+}
+// a match that is also in the betje van de dag gets the same bet in a league betje (no "1X" here and "X2" there)
+function alignWithBetje(c, bj) {
+  const same = new Map(((bj && !bj.none && bj.legs) || []).map((l) => [l.h + "|" + l.a, l]));
+  let changed = false;
+  c.legs = c.legs.map((l) => { const o = same.get(l.h + "|" + l.a); if (o && o.id !== l.id) { changed = true; return Object.assign({}, o, { hit: null, score: undefined }); } return l; });
+  if (changed) {
+    c.odds = Math.round(c.legs.reduce((x, l) => x * l.odd, 1) * 100) / 100;
+    c.p = c.legs.reduce((x, l) => x * (l.pb ?? l.p), 1);
+  }
+  return c;
+}
+
 let made = null;
 if (!FINAL) {
   if (!W) {
@@ -146,7 +190,7 @@ if (!Array.isArray(BJ)) BJ = [];
 let bjToday = BJ.find((x) => x.day === today && (!x.none || x.chosen_by === "claude"));
 let bjMade = false;
 if (!bjToday && !FINAL) {
-  const bj = M.betje(eng, data, hist, { day: today, after: now, skipDivs: failed });
+  const bj = M.betje(eng, data, hist, { day: today, after: now, skipDivs: failed, lo: 5, hi: 10, target: 7, maxLegs: 5 });
   const prevDay = BJ.find((x) => x.day === today) || {};
   BJ = BJ.filter((x) => x.day !== today);
   if (bj.legs.length >= 2) {
@@ -156,14 +200,15 @@ if (!bjToday && !FINAL) {
   } else {
     // no betje with bookmaker odds (often there are none): the surest ±5x from today's matches with estimated odds,
     // markets settled by the final score first, so there is a betje every day (the deep dive can replace it)
-    const fb = M.superbet(eng, data, hist, { from: today, to: today, after: now, target: 4.5, maxLegs: 4, minP: 0.6, skipDivs: failed, ids: CL_IDS });
+    const fb = M.superbet(eng, data, hist, { from: today, to: today, after: now, target: 6, maxLegs: 5, minP: 0.6, skipDivs: failed, ids: CL_IDS });
     if (fb.reached && fb.legs.length >= 2) {
-      bjToday = Object.assign(fb, { day: today, name: "Betje van de dag", made: now, status: "bezig", legs_hit: 0, chosen_by: "model", target: 5,
+      bjToday = Object.assign(fb, { day: today, name: "Betje van de dag", made: now, status: "bezig", legs_hit: 0, chosen_by: "model", target: 7,
         estimated: true, note: bj.note, legs: fb.legs.map((l) => Object.assign(l, { hit: null })) });
       bjMade = true;
     } else bjToday = { day: today, none: true, made: now, note: bj.note, priced: bj.priced, candidates: bj.candidates };
   }
   for (const g of EU) if (prevDay[g.key]) { bjToday[g.key] = prevDay[g.key]; if (prevDay[g.key + "_note"]) bjToday[g.key + "_note"] = prevDay[g.key + "_note"]; }
+  if (prevDay.leagues) { bjToday.leagues = prevDay.leagues; if (prevDay.leagues_notes) bjToday.leagues_notes = prevDay.leagues_notes; }
   BJ.push(bjToday);
   BJ = BJ.slice(-60);
 }
@@ -174,6 +219,17 @@ if (!FINAL && betjeFile) for (const g of EU) {
   if (!bjToday[g.key] || !bjToday[g.key].length) { const n = euNight(g); if (n && n.length) bjToday[g.key] = n; }
 }
 const euCombis = (t) => EU.flatMap((g) => (t && t[g.key]) || []);
+if (!FINAL && betjeFile && WEEKEND) {
+  if (!bjToday) { bjToday = { day: today, none: true, made: now, note: "nog geen betje" }; BJ.push(bjToday); }
+  // made once a day; leagues that had nothing at an earlier run are tried again
+  const L = bjToday.leagues || {};
+  for (const div of LEAGUE_DIVS) {
+    if ((L[div] && L[div].length) || failed.includes(div)) continue;
+    const x = leagueBetjes(div).map((c) => alignWithBetje(c, bjToday));
+    if (x.length) L[div] = x;
+  }
+  bjToday.leagues = L;
+}
 if (bjToday) { explain(bjToday); for (const c of euCombis(bjToday)) explain(c); }
 
 // ---- dossier for the deep dive: the matches to research, with the model's numbers for every market
@@ -270,7 +326,7 @@ function writeDossier() {
   matches.sort((x, y) => x.priority - y.priority || (x.when < y.when ? -1 : 1));
   const weekMadeToday = !!(W && W.main && (W.main.made || "").startsWith(today));
   fs.writeFileSync(path.join(stateDir, "dossier.json"), JSON.stringify({ today, now, rules: {
-    betje: "2 tot 4 bets uit de matches van vandaag (rol 'kandidaat betje van de dag'), één per match, elke markt mag (uitslag, dubbele kans, goals, BTTS ja/nee, corners, kaarten, schoten); samen 4 tot 7,5x (mik op ±5x); enkel bets die je na je onderzoek 'sterk' of 'ok' vindt. Er moet elke dag met matchen een betje zijn: ook als het onderzoek beperkt is, kies je het beste betje dat je kan maken (bij voorkeur markten die op de eindstand afgerekend worden)",
+    betje: "2 tot 5 bets uit de matches van vandaag (rol 'kandidaat betje van de dag'), één per match, elke markt mag (uitslag, dubbele kans, goals, BTTS ja/nee, corners, kaarten, schoten); samen 5 tot 10x (mik op ±6 à 7x); enkel bets die je na je onderzoek 'sterk' of 'ok' vindt. Er moet elke dag met matchen een betje zijn: ook als het onderzoek beperkt is, kies je het beste betje dat je kan maken (bij voorkeur markten die op de eindstand afgerekend worden)",
     cl: "Champions League-avond (enkel als er vandaag CL-matchen zijn): 1 tot 4 combi's uit de CL-matchen van vandaag (rol 'kandidaat CL-avond'), elk 2 tot 6 bets, één per match, samen minstens 5x (hoogstens 40x), enkel markten die op de eindstand afgerekend worden (uitslag, dubbele kans, goals, BTTS, scoren, nul houden), enkel bets die je 'sterk' of 'ok' vindt; de odds zijn geschat. Spreiden: dezelfde bet, of een bet die op hetzelfde neerkomt (bv. 'Porto wint of gelijk' en 'Porto scoort': allebei moet Porto het goed doen; BTTS telt voor beide ploegen en voor goals), staat nooit in alle combi's tegelijk; een match mag wel in meerdere combi's met een andere bet. Ook als het onderzoek beperkt is: maak de combi's toch, met de beste info die je hebt",
     el: "Europa League-avond (enkel als er vandaag EL-matchen zijn): dezelfde regels als de Champions League-avond, maar enkel met de EL-matchen van vandaag (rol 'kandidaat EL-avond')",
     ecl: "Conference League-avond (enkel als er vandaag ECL-matchen zijn): dezelfde regels als de Champions League-avond, maar enkel met de ECL-matchen van vandaag (rol 'kandidaat ECL-avond')",
@@ -352,7 +408,7 @@ if (FINAL) {
   // Claude can also decide there is no good betje today: empty legs with a reason
   const noneOf = (ch) => ch && Array.isArray(ch.legs) && !ch.legs.length && ch.reason;
   if (bjToday && noneOf(choice.betje)) {
-    const keepCl = Object.fromEntries(EU.flatMap((g) => [[g.key, bjToday[g.key]], [g.key + "_note", bjToday[g.key + "_note"]]]));
+    const keepCl = Object.assign(Object.fromEntries(EU.flatMap((g) => [[g.key, bjToday[g.key]], [g.key + "_note", bjToday[g.key + "_note"]]])), { leagues: bjToday.leagues, leagues_notes: bjToday.leagues_notes });
     BJ = BJ.filter((x) => x.day !== today);
     bjToday = Object.assign({ day: today, none: true, made: bjToday.made || now, decided: now, chosen_by: "claude", note: String(choice.betje.reason).slice(0, 600) }, keepCl);
     BJ.push(bjToday);
@@ -414,13 +470,32 @@ if (FINAL) {
       } else fin.choice[`${g.key} ${D}`] = `niet gebruikt: ${errs.join("; ")}`;
     }
   }
+  // league betjes (weekend): {"leagues": {"E0": {"bets": [{name, legs: [{key, id, reason}], reason}], "reason"}}}: 1 or 2 per league,
+  // only that league's matches of today, 2 to 5 bets, 2.5 to 8x; replaces the model's betjes of that league
+  for (const [div, ch] of Object.entries(choice.leagues || {})) {
+    if (!bjToday || !LEAGUE_DIVS.includes(div) || !ch || !Array.isArray(ch.bets) || !ch.bets.length) continue;
+    const got = [], errs = [];
+    ch.bets.slice(0, 2).forEach((cb, i) => {
+      const [b, err] = applyChoice(`leagues.${div}`, cb, { min: 1, max: 5, lo: cb.legs && cb.legs.length === 1 ? 1.2 : LG_LO, hi: LG_HI, day: today });
+      if (b && b.legs.every((l) => l.div === div))
+        got.push(Object.assign({ name: String(cb.name || `Betje ${data.divNames[div]}${ch.bets.length > 1 ? " " + (i + 1) : ""}`).slice(0, 60), target: LG_TARGET, made: now, decided: now, status: "bezig", legs_hit: 0 }, b));
+      else errs.push(`${cb.name || i + 1}: ${err || "enkel matchen van die competitie"}`);
+    });
+    const shared = got.length > 1 && !errs.length ? sharedCore(got, data.divNames[div]) : null;
+    if (shared) errs.push(shared);
+    if (got.length && !errs.length) {
+      bjToday.leagues = Object.assign({}, bjToday.leagues, { [div]: got });
+      if (ch.reason) bjToday.leagues_notes = Object.assign({}, bjToday.leagues_notes, { [div]: String(ch.reason).slice(0, 500) });
+      fin.choice[`leagues ${div}`] = `gebruikt (${got.length})`;
+    } else fin.choice[`leagues ${div}`] = `niet gebruikt: ${errs.join("; ")}`;
+  }
   // today's betje
   if (bjToday && choice.betje) {
-    const [b, err] = applyChoice("betje", choice.betje, { min: 2, max: 4, lo: 4, hi: 7.5, day: today });
+    const [b, err] = applyChoice("betje", choice.betje, { min: 2, max: 5, lo: 5, hi: 10, day: today });
     if (b) {
-      const keepCl = Object.fromEntries(EU.flatMap((g) => [[g.key, bjToday[g.key]], [g.key + "_note", bjToday[g.key + "_note"]]]));
+      const keepCl = Object.assign(Object.fromEntries(EU.flatMap((g) => [[g.key, bjToday[g.key]], [g.key + "_note", bjToday[g.key + "_note"]]])), { leagues: bjToday.leagues, leagues_notes: bjToday.leagues_notes });
       BJ = BJ.filter((x) => x.day !== today);
-      bjToday = Object.assign({ day: today, target: 5, name: "Betje van de dag", made: bjToday.made || now, decided: now, status: "bezig", legs_hit: 0 }, b, keepCl);
+      bjToday = Object.assign({ day: today, target: 7, name: "Betje van de dag", made: bjToday.made || now, decided: now, status: "bezig", legs_hit: 0 }, b, keepCl);
       BJ.push(bjToday);
       fin.choice.betje = "gebruikt";
     } else fin.choice.betje = `niet gebruikt: ${err}`;
@@ -432,7 +507,7 @@ if (FINAL) {
     else fin.choice.week = `niet gebruikt: ${err}`;
   }
   if (W) { explain(W.main); explain(W.second); }
-  if (bjToday) { explain(bjToday); for (const c of euCombis(bjToday)) explain(c); }
+  if (bjToday) { explain(bjToday); for (const c of euCombis(bjToday)) explain(c); for (const c of leagueCombis(bjToday)) explain(c); }
 }
 // European nights of the next days that were chosen in advance (shown on the page before their day)
 const upcoming = BJ.filter((x) => x.day > today && euCombis(x).length).sort((x, y) => (x.day < y.day ? -1 : 1));
@@ -450,6 +525,7 @@ const shown = new Set();
 const mark = (b) => { for (const l of (b && !b.none && b.legs) || []) shown.add(keyOf(l)); if (b && b.btts) mark(b.btts); };
 mark(bjToday); for (const c of euCombis(bjToday)) mark(c); if (W) { mark(W.main); mark(W.second); }
 for (const x of upcoming) for (const c of euCombis(x)) mark(c);
+for (const c of leagueCombis(bjToday)) mark(c);
 data.research = {};
 for (const k of shown) if (RESEARCH[k]) data.research[k] = RESEARCH[k];
 
@@ -472,6 +548,13 @@ for (const g of EU) {
     profit: Math.round(cdone.reduce((s, b) => s + (b.status === "gewonnen" ? effOdds(b) - 1 : -1), 0) * 100) / 100 };
 }
 data.betje.clRecord = data.betje.euRecord.cl;
+{ // record of the league betjes (weekend)
+  const L = BJ.flatMap((x) => leagueCombis(x)).filter((c) => c.status === "gewonnen" || c.status === "verloren");
+  const eff = (c) => c.legs.reduce((o, l) => (l.hit === "void" ? o : o * l.odd), 1);
+  data.betje.leagueRecord = { n: L.length, won: L.filter((c) => c.status === "gewonnen").length,
+    profit: Math.round(L.reduce((s, c) => s + (c.status === "gewonnen" ? eff(c) - 1 : -1), 0) * 100) / 100 };
+  data.betje.weekend = WEEKEND;
+}
 // European nights of the next days chosen in advance: {day, cl, cl_note, el, ...}
 data.betje.upcoming = upcoming.map((x) => Object.fromEntries([["day", x.day], ...EU.flatMap((g) => [[g.key, x[g.key]], [g.key + "_note", x[g.key + "_note"]]])].filter(([, v]) => v != null)));
 data.betje.euGroups = EU.map((g) => ({ key: g.key, name: g.name, tag: g.tag, safe: !!g.safe }));

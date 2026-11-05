@@ -169,6 +169,9 @@ button, input, select { font: inherit; color: inherit }
 .leg-st.ko { background: var(--bad); color: var(--surface) }
 .leg-st.vd { background: var(--sunk); color: var(--muted) }
 .leg-st.op { box-shadow: inset 0 0 0 1.5px var(--line) }
+.lg-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; font-size: 12px; color: var(--muted) }
+.lg-chips .chip { font: inherit; font-size: 12px; color: var(--ink); background: var(--sunk); border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; cursor: pointer; min-height: 32px }
+.lg-chips .chip b { font-weight: 600; font-family: var(--f-mono) }
 .combo-head h3 .ahead { font: 600 11px/1 var(--f-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--surface); background: var(--ink); border-radius: 999px; padding: 4px 8px; vertical-align: middle; margin-left: 6px }
 .leg-st.live { box-shadow: inset 0 0 0 2px var(--warn); animation: lvPulse 1.6s ease-in-out infinite }
 .leg-st.live.up { box-shadow: inset 0 0 0 2px var(--hit) }
@@ -1133,8 +1136,9 @@ const HIST = /*__HISTORY__*/null;
       <p><b>MLS.</b> De uitslagen van 2026 komen per speeldag van voetbalkrant.com en zijn bij het toevoegen nagekeken tegen de officiële stand (alle 30 ploegen identiek); De reeksen steunen op dit seizoen. Voor de MLS is er geen Elo en geen corners, kaarten, schoten of ruststanden, dus enkel uitslag- en goalmarkten. Play-offs zitten er niet in.</p>
       <p><b>Schoten en dubbele kans.</b> Schoten en schoten op doel per ploeg (10+, 13+, 3+ en 5+ op doel, meer schoten dan de tegenstander) volgen hetzelfde model; van alle markten houden schotreeksen het best stand. Ze komen uit dezelfde bron als corners en lopen dus even ver achter. Dubbele kans (1X, X2, 12): waar enkel 1X2-odds bekend zijn, wordt de odd daaruit afgeleid.</p>
       <p><b>Spelers.</b> Uit API-Football: per match minuten, goals, assists, schoten, schoten op doel en kaarten van elke speler, plus blessures en schorsingen. Per speler een cijfer per 90 minuten dit seizoen (de laatste matchen tellen zwaarder, en met weinig minuten wordt het naar het gemiddelde van zijn positie getrokken) × zijn verwachte speeltijd (laatste 5 matchen) × de match: de verwachte goals van zijn ploeg volgens het model voor goals en assists, en wat de tegenstander toelaat (thuis of uit) voor schoten en kaarten. De kans geldt als hij meespeelt, zoals bij de bookmaker, waar een spelersbet vervalt als de speler niet meedoet. Is er geen API-Football-data, dan valt de site terug op de topschutters van voetbalkrant (Jupiler Pro League, Champions League, Europa League; enkel scoren). Nog niet getest zoals de ploegmarkten: het trackrecord loopt sinds oktober 2026.</p>
-      <p><b>Betje van de dag.</b> Elke ochtend maakt het model een voorstel van ±5x (2 tot 4 bets, één per match) uit de matches van die dag: enkel 1X2 en over/under 2.5 met een echte odd van minstens 1,60 waar het model minstens 3 procentpunt meer kans ziet dan de bookmaker (zonder marge); als kans telt het gemiddelde van model en bookmaker, omdat de markt bij grote verschillen meestal gelijk heeft.</p>
-      <p><b>Deep dive.</b> Daarna onderzoekt Claude elke kandidaat-match van die dag en elke bet van de week die vandaag of morgen gespeeld wordt op het web, bij betrouwbare bronnen (officiële clubs en competities, grote sportmedia, statistiek- en blessuresites): vorm in alle competities, onderlinge duels, blessures en schorsingen, verwachte opstelling, scheidsrechter en kaarten, context (stand, belang, vermoeidheid). Met de cijfers van het model als vertrekpunt redeneert Claude over alle markten (uitslag, goals, BTTS, corners, kaarten, schoten) en kiest het betje zelf; elke bet krijgt een oordeel (sterk, ok, riskant of afgeraden), een uitleg en de bronnen. De superbet van de week verandert na de dag waarop hij gemaakt is niet meer: daar is het onderzoek enkel een beoordeling. Komt de keuze van Claude niet door de controle (verkeerd aantal bets, totale odd buiten ±4–7,5x, een bet die het onderzoek zelf afraadt), dan blijft het voorstel van het model staan.</p>
+      <p><b>Betje van de dag.</b> Elke ochtend maakt het model een voorstel van 5 tot 10x (2 tot 5 bets, één per match) uit de matches van die dag over alle competities: enkel 1X2 en over/under 2.5 met een echte odd van minstens 1,60 waar het model minstens 3 procentpunt meer kans ziet dan de bookmaker (zonder marge); als kans telt het gemiddelde van model en bookmaker, omdat de markt bij grote verschillen meestal gelijk heeft.</p>
+      <p><b>Betje per competitie.</b> Op vrijdag, zaterdag en zondag maakt het model ook per competitie één of twee betjes van ±3 à 4x uit de matchen van die competitie van die dag (twee als er minstens vijf matchen zijn; ze hebben dan geen match gemeen). Bij Beste bets zie je het betje van de competitie die je bovenaan kiest; kies een andere competitie en het betje verandert mee. Enkel markten die op de eindstand afgerekend worden, en ze tellen mee in de Historiek.</p>
+      <p><b>Deep dive.</b> Daarna onderzoekt Claude elke kandidaat-match van die dag en elke bet van de week die vandaag of morgen gespeeld wordt op het web, bij betrouwbare bronnen (officiële clubs en competities, grote sportmedia, statistiek- en blessuresites): vorm in alle competities, onderlinge duels, blessures en schorsingen, verwachte opstelling, scheidsrechter en kaarten, context (stand, belang, vermoeidheid). Met de cijfers van het model als vertrekpunt redeneert Claude over alle markten (uitslag, goals, BTTS, corners, kaarten, schoten) en kiest het betje zelf; elke bet krijgt een oordeel (sterk, ok, riskant of afgeraden), een uitleg en de bronnen. De superbet van de week verandert na de dag waarop hij gemaakt is niet meer: daar is het onderzoek enkel een beoordeling. Komt de keuze van Claude niet door de controle (verkeerd aantal bets, totale odd buiten 5–10x, een bet die het onderzoek zelf afraadt), dan blijft het voorstel van het model staan.</p>
       <p><b>Champions League-avond.</b> Op elke dag met Champions League-matchen staan er bovenaan Beste bets combi's van minstens 5x uit enkel de CL-matchen van die dag: twee betjes zonder gemeenschappelijke match en een knaller van 10x of meer. Na de deep dive op elke CL-match kiest Claude ze zelf (1 tot 4 combi's), met het model als vertrekpunt. Gespreid: dezelfde bet, of een bet die op hetzelfde neerkomt (zoals 'Porto wint of gelijk' en 'Porto scoort'), staat nooit in alle CL-betjes tegelijk, zodat één slechte match niet alles kapotmaakt; een match mag wel in meerdere betjes met een andere bet. Enkel markten die op de eindstand afgerekend worden; de odds zijn geschat, want voor de bekers hebben we geen bookmakerodds. Hetzelfde op elke dag met Europa League- of Conference League-matchen (Europa League-avond, Conference League-avond), met daarbij één <b>Europese safe combi</b> van ±2 à 3x uit de EL- en ECL-matchen samen, met de bets die het zekerst lijken.</p>
       <p><b>BTTS.</b> "Beide teams scoren: ja/nee" is een gewone markt, net als 1X of over 2.5: hij mag in de superbet (vanaf dezelfde minimumkans als de andere bets; BTTS-reeksen zijn wel zwakker, dus het signaal telt daar niet mee) en in het betje als Claude hem na de deep dive goed vindt. Bookmakerodds voor BTTS hebben we niet: die odds zijn geschat.</p>
       <p><b>Afrekenen.</b> Uitslag- en goalbets worden afgerekend op de eindstand; corners, kaarten (geel + rood), schoten en ruststanden op de matchstatistieken van football-data.co.uk, die een paar dagen later binnenkomen. Komen die er na 12 dagen niet, dan vervalt de bet.</p><p><b>Live.</b> Tijdens de matchen vraagt je browser elke minuut de live-stand op bij ESPN (een gratis openbare livescorebron). Bij elke bet zie je de stand en de minuut. Een bet krijgt al ✓ of ✗ zodra de stand hem beslist (bv. over 2.5 is binnen bij het derde doelpunt, een thuiszege na het eindsignaal), en de combi staat meteen op gewonnen of verloren. Kaarten, corners en schoten zitten niet in de live-stand: die worden pas bij de update van de volgende ochtend afgerekend, net als de officiële winst en verlies in de Historiek.</p>
@@ -1328,6 +1332,7 @@ const HIST = /*__HISTORY__*/null;
     const BJ = DATA.betje || {}, W = DATA.superbetWeek || {}, out = [];
     const add = (b) => { if (b && b.status && b.status !== "bezig") return; for (const l of (b && !b.none && b.legs) || []) out.push(l); };
     add(BJ.today); for (const g of EU_GROUPS) for (const c of (BJ.today && BJ.today[g.key]) || []) add(c); add(W.main); add(W.second);
+    for (const cs of Object.values((BJ.today && BJ.today.leagues) || {})) for (const c of cs) add(c);
     const now = nowLocal(), since = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
     return out.filter((l) => l.hit == null && ESPN[l.div] && l.when && l.when.slice(0, 10) >= since
       && l.when <= new Date(Date.parse(now.replace(" ", "T") + ":00Z") + 20 * 6e4).toISOString().slice(0, 16).replace("T", " "));
@@ -1412,7 +1417,27 @@ const HIST = /*__HISTORY__*/null;
       : byClaude ? "Gekozen door Claude na een deep dive op de matchen van vanavond, met de cijfers van het model als vertrekpunt." : "Het voorstel van het model."} ${rule} Enkel markten die op de eindstand afgerekend worden. Voor de bekers hebben we geen bookmakerodds: de odds zijn geschat (eerlijke odd min 5% marge). Hou de inzet klein.`;
     return `<div class="combo super cl">${head}${t[key + "_note"] ? `<p class="note"><b>Keuze van Claude:</b> ${esc(t[key + "_note"])}</p>` : ""}${blocks}<p class="note">${note}${recTxt}</p></div>`;
   }
-  // Betje van de dag: ±5x from today's matches with real bookmaker odds, only legs with value
+  // Weekend (Friday to Sunday): one or two betjes per league from that league's matches of the day, for the league that is picked
+  function leagueCardHTML(BJ, div) {
+    const t = BJ.today, L = (t && t.leagues) || {}, list = L[div] || [], name = DATA.divNames[div] || div, nm = (x) => DISPLAY[x] || x;
+    const others = Object.keys(L).filter((d) => d !== div && L[d].length);
+    const chips = others.length ? `<div class="lg-chips"><span>Andere competities:</span>${others.map((d) => `<button class="chip" data-lg="${esc(d)}">${esc(DATA.divNames[d] || d)} <b>${L[d].map((c) => c.odds.toFixed(1).replace(".", ",") + "x").join(" · ")}</b></button>`).join("")}</div>` : "";
+    const rec = BJ.leagueRecord || { n: 0 };
+    const recTxt = rec.n ? ` Tot nu toe ${rec.won} van ${rec.n} competitie-betjes gewonnen, ${rec.profit >= 0 ? "+" : "−"}${Math.abs(rec.profit).toFixed(2).replace(".", ",")} eenheden bij een inzet van 1 per betje.` : "";
+    const head = `<div class="combo-head"><h3>${list.length && list[0].single ? "Bet" : "Betje"} ${esc(name)}</h3><span class="pl-meta">${esc(fmtISO(t.day))} · ${list.length ? `${list.length} betje${list.length === 1 ? "" : "s"} · ` : ""}enkel ${esc(name)}-matchen van vandaag</span></div>`;
+    if (!list.length) return `<div class="combo super lg">${head}<p class="note">Vandaag geen betje voor de ${esc(name)}: er zijn vandaag te weinig matchen van deze competitie (of geen meer die nog moeten beginnen).${recTxt}</p>${chips}</div>`;
+    const blocks = list.map((b, i) => {
+      const legs = b.legs.map((l) => `<li>${legIcon(l)}<span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""}${liveBadge(l)} · ${pct(l.pb ?? l.p)} · ${l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}` : `±${l.odd.toFixed(2)} geschat`}</small></span></li>`).join("");
+      const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
+      return `<div class="sub-combo"><h4>${esc(b.name)} · ${b.odds.toFixed(2)}x</h4><ol>${legs}</ol>
+        <div class="combo-sum"><span>${betStatus(b)}</span><span>Kans <b>${(b.p * 100).toFixed(b.p < 0.1 ? 1 : 0)}%</b> (1 op ${Math.round(1 / b.p)})</span>${canAdd ? `<button class="go" data-sb="lg:${esc(div)}.${i}">Zet in combi</button>` : ""}</div>
+        ${whyHTML(b, "Waarom deze bets?", false)}</div>`;
+    }).join("");
+    const byClaude = list.some((b) => b.chosen_by === "claude"), note = (t.leagues_notes || {})[div];
+    return `<div class="combo super lg">${head}${note ? `<p class="note"><b>Keuze van Claude:</b> ${esc(note)}</p>` : ""}${blocks}
+      <p class="note">${list[0].single ? "Vandaag maar één match van deze competitie: één bet in plaats van een combi. " : ""}${byClaude ? "Gekozen door Claude, met de cijfers van het model als vertrekpunt." : `Het voorstel van het model: de zekerste bets uit de matchen van deze competitie van vandaag${list[0].single ? "" : ", meestal ±3 à 4x (minder als er weinig matchen zijn)"}.`}${list.length > 1 ? " De twee betjes hebben geen match gemeen." : ""} Enkel markten die op de eindstand afgerekend worden; waar geen bookmakerodd bekend is, is de odd geschat. Kies bovenaan een andere competitie om haar betje te zien. Hou de inzet klein.${recTxt}</p>${chips}</div>`;
+  }
+  // Betje van de dag: 5 to 10x from today's matches over all competitions
   function betjeCardHTML(BJ) {
     const lname = (d) => (DATA.divNames[d] || (DATA.cups[d] && DATA.cups[d].name) || d), nm = (t) => DISPLAY[t] || t;
     const rec = BJ.record || { n: 0 };
@@ -1431,8 +1456,8 @@ const HIST = /*__HISTORY__*/null;
     const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
     const sum = `<span>${st}</span><span>Combi-odd <b>${b.odds.toFixed(2)}</b></span><span>Kans <b>${(b.p * 100).toFixed(0)}%</b> (1 op ${Math.round(1 / b.p)})</span><span>Verwachte opbrengst <b>${ev >= 0 ? "+" : "−"}${Math.abs(ev)}%</b></span>${canAdd ? `<button class="go" data-sb="betje">Zet in combi</button>` : ""}`;
     const cls = b.status === "gewonnen" ? " won" : b.status === "verloren" ? " lost" : "";
-    const note = b.chosen_by !== "claude" && b.estimated ? `Het voorstel van het model: vandaag waren er geen bookmakerodds, dus het model nam de zekerste bets van vandaag tot ±5x, enkel markten die op de eindstand afgerekend worden. De odds zijn geschat (eerlijke odd min 5% marge): vergelijk bij je bookmaker en hou de inzet klein.`
-      : b.chosen_by === "claude" ? `Gekozen door Claude na een deep dive op elke match (vorm in alle competities, onderlinge duels, blessures en schorsingen, scheidsrechter, context) uit alle markten van vandaag, met de cijfers van het model als vertrekpunt: 2 tot 4 bets, samen ±5x. Waar geen bookmakerodd bekend is, is de odd geschat. Ook na onderzoek blijft het een gok: hou de inzet klein.` : `Elke dag één keer gemaakt uit de matches van die dag met een echte bookmakerodd (1X2 en over/under 2.5), van 2 tot 4 bets en ±${b.target || 5}x. Er gaan enkel bets in met een odd van minstens 1,60 waar het model meer kans ziet dan de bookmaker. De kans hierboven is het gemiddelde van het model en de bookmaker (zonder marge): waar ze sterk verschillen, heeft de markt meestal gelijk. Ook met waarde blijft het een gok: hou de inzet klein.`;
+    const note = b.chosen_by !== "claude" && b.estimated ? `Het voorstel van het model: vandaag waren er geen bookmakerodds, dus het model nam de zekerste bets van vandaag tot ±6x, enkel markten die op de eindstand afgerekend worden. De odds zijn geschat (eerlijke odd min 5% marge): vergelijk bij je bookmaker en hou de inzet klein.`
+      : b.chosen_by === "claude" ? `Gekozen door Claude na een deep dive op elke match (vorm in alle competities, onderlinge duels, blessures en schorsingen, scheidsrechter, context) uit alle markten van vandaag, met de cijfers van het model als vertrekpunt: 2 tot 5 bets, samen 5 tot 10x. Waar geen bookmakerodd bekend is, is de odd geschat. Ook na onderzoek blijft het een gok: hou de inzet klein.` : `Elke dag één keer gemaakt uit de matches van die dag met een echte bookmakerodd (1X2 en over/under 2.5), van 2 tot 5 bets en 5 tot 10x. Er gaan enkel bets in met een odd van minstens 1,60 waar het model meer kans ziet dan de bookmaker. De kans hierboven is het gemiddelde van het model en de bookmaker (zonder marge): waar ze sterk verschillen, heeft de markt meestal gelijk. Ook met waarde blijft het een gok: hou de inzet klein.`;
     return `<div class="combo super${cls}"><div class="combo-head"><h3>Betje van de dag</h3>
       <span class="pl-meta">${esc(fmtISO(b.day))} · ${n} bets · ±${b.target}x</span></div>
       <ol>${legs}</ol><div class="combo-sum">${sum}</div><p class="note">${note}${recTxt ? ` ${recTxt}` : ""}</p>${hist}${whyHTML(b)}</div>`;
@@ -1443,6 +1468,8 @@ const HIST = /*__HISTORY__*/null;
     if (BJ) {
       for (const g of EU_GROUPS) { const c = euCardHTML(BJ, g); if (c) cards.push(c); }
       cards.push(betjeCardHTML(BJ));
+      // weekend: the betje(s) of the league that is picked
+      if (BJ.today && BJ.today.leagues && DATA.divNames[state.div] && (BJ.weekend || Object.keys(BJ.today.leagues).length)) cards.push(leagueCardHTML(BJ, state.div));
       // European nights of the next days, already chosen in advance
       (BJ.upcoming || []).forEach((x, ui) => { for (const g of EU_GROUPS) { const c = euCardHTML(BJ, g, x, ui); if (c) cards.push(c); } });
     }
@@ -1454,13 +1481,14 @@ const HIST = /*__HISTORY__*/null;
     wrap.innerHTML = cards.join("");
     wrap.querySelectorAll("button[data-sb]").forEach((btn) => btn.addEventListener("click", () => {
       const [k0, k1] = btn.dataset.sb.split("."), [uk, gk] = k0.includes("|") ? k0.split("|") : [null, k0];
-      const b0 = uk ? BJ.upcoming[+uk.slice(1)][gk] : k0 === "betje" ? BJ.today : EU_GROUPS.some((g) => g.key === k0) ? BJ.today[k0] : W[k0], b = k1 ? b0[k1] : b0, nm = (t) => DISPLAY[t] || t;
+      const b0 = k0.startsWith("lg:") ? BJ.today.leagues[k0.slice(3)] : uk ? BJ.upcoming[+uk.slice(1)][gk] : k0 === "betje" ? BJ.today : EU_GROUPS.some((g) => g.key === k0) ? BJ.today[k0] : W[k0], b = k1 ? b0[k1] : b0, nm = (t) => DISPLAY[t] || t;
       for (const l of b.legs) {
         const k = `${l.mkey}|${l.id}`;
         if (!state.slip.some((x) => x.k === k)) state.slip.push({ k, match: l.mkey, label: `${nm(l.h)} – ${nm(l.a)}: ${l.label}`, p: l.pb ?? l.p });
       }
       store.set("slip", state.slip); renderSlip(); renderBest();
     }));
+    wrap.querySelectorAll("button[data-lg]").forEach((btn) => btn.addEventListener("click", () => setLeague(btn.dataset.lg)));
   }
   function renderBest() {
     renderSuper();

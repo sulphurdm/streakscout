@@ -12,7 +12,8 @@ import json
 from pathlib import Path
 
 GROUPS = [("betje", "Betje van de dag"), ("cl", "Champions League-avond"), ("el", "Europa League-avond"),
-          ("ecl", "Conference League-avond"), ("eusafe", "Europese safe combi"), ("week", "Superbet van de week"),
+          ("ecl", "Conference League-avond"), ("eusafe", "Europese safe combi"), ("league", "Betje per competitie"),
+          ("week", "Superbet van de week"),
           ("second", "Second chance"), ("daily", "Superbet van de dag (oud)")]
 GNAME = dict(GROUPS)
 
@@ -198,6 +199,9 @@ def collect(state):
         for g in ("cl", "el", "ecl", "eusafe"):
             for c in d.get(g) or []:
                 add(g, f"{d['day']}|{g}|{c.get('name')}", d["day"], c)
+        for div, cs in (d.get("leagues") or {}).items():  # weekend: betjes per league
+            for c in cs:
+                add("league", f"{d['day']}|league|{div}|{c.get('name')}", d["day"], c)
     weeks = _load(state / "superbet_weeks.json", [])
     cur = _load(state / "superbet_week.json", None)
     for w in weeks + ([cur] if cur else []):

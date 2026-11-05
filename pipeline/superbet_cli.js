@@ -335,6 +335,7 @@ function writeDossier() {
     current: { betje: bjToday && !bjToday.none ? bjToday.legs.map((l) => ({ key: keyOf(l), id: l.id })) : [],
       ...Object.fromEntries(EU.map((g) => [g.key, ((bjToday && bjToday[g.key]) || []).map((c) => ({ name: c.name, odds: c.odds, early: !!c.early, legs: c.legs.map((l) => ({ key: keyOf(l), id: l.id })) }))])),
     },
+    early_betje: bjToday && bjToday.early ? "Het betje van de dag en de betjes per competitie van vandaag zijn al de avond ervoor gemaakt (op vraag van de gebruiker, die er misschien al op ingezet heeft): die blijven staan. Zet geen \"betje\" of \"leagues\" in choice.json; onderzoek de matchen wel en meld in je bericht als er nieuws is dat een bet ervan riskanter maakt." : undefined,
     early: "Een Europese avond waarvan de combi's in 'current' \"early\": true hebben, is al vooraf gekozen (de dag ervoor, op vraag van de gebruiker, die er misschien al op ingezet heeft): die blijft staan. Zet die groep niet in choice.json; onderzoek de matchen wel en meld in je bericht als er nieuws is dat een bet ervan riskanter maakt.",
     week_made_today: weekMadeToday }, matches }, null, 1));
   return matches;
@@ -407,6 +408,7 @@ if (FINAL) {
   const choice = readJ(path.join(stateDir, "choice.json"), {});
   // Claude can also decide there is no good betje today: empty legs with a reason
   const noneOf = (ch) => ch && Array.isArray(ch.legs) && !ch.legs.length && ch.reason;
+  if (bjToday && bjToday.early && choice.betje) { fin.choice.betje = "al vooraf gemaakt: behouden"; delete choice.betje; }
   if (bjToday && noneOf(choice.betje)) {
     const keepCl = Object.assign(Object.fromEntries(EU.flatMap((g) => [[g.key, bjToday[g.key]], [g.key + "_note", bjToday[g.key + "_note"]]])), { leagues: bjToday.leagues, leagues_notes: bjToday.leagues_notes });
     BJ = BJ.filter((x) => x.day !== today);
@@ -474,6 +476,7 @@ if (FINAL) {
   // only that league's matches of today, 2 to 5 bets, 2.5 to 8x; replaces the model's betjes of that league
   for (const [div, ch] of Object.entries(choice.leagues || {})) {
     if (!bjToday || !LEAGUE_DIVS.includes(div) || !ch || !Array.isArray(ch.bets) || !ch.bets.length) continue;
+    if (((bjToday.leagues || {})[div] || []).some((c) => c.early)) { fin.choice[`leagues ${div}`] = "al vooraf gemaakt: behouden"; continue; }
     const got = [], errs = [];
     ch.bets.slice(0, 2).forEach((cb, i) => {
       const [b, err] = applyChoice(`leagues.${div}`, cb, { min: 1, max: 5, lo: cb.legs && cb.legs.length === 1 ? 1.2 : LG_LO, hi: LG_HI, day: today });

@@ -192,8 +192,9 @@ def run(root, today, out_dir):
     hp = state / "superbet_history.json"
     hist = json.load(open(hp)) if hp.exists() else []
     sbp = state / "superbet.json"
-    if sbp.exists() and "week" not in json.load(open(sbp)):  # old daily superbets only; weekly ones: weekly.py
-        sb = json.load(open(sbp))
+    sb = json.load(open(sbp)) if sbp.exists() else {}
+    # old daily superbets only (weekly ones: weekly.py); an empty one (no matches, e.g. an international break) has no "made"
+    if sb and "week" not in sb and sb.get("made") and sb.get("legs"):
         hist = [x for x in hist if x.get("made") != sb.get("made")]
         hist.append({"made": sb.get("made"), "odds": sb.get("odds"), "p": round(sb.get("p", 0), 4),
                      "legs": [{k: l.get(k) for k in ("div", "when", "h", "a", "id", "label", "p", "odd")} for l in sb.get("legs", [])]})
@@ -208,7 +209,7 @@ def run(root, today, out_dir):
         day["settled"] = all(h is not None for h in hits) and bool(hits)
         day["won"] = (all(h == 1 for h in hits) if day["settled"] else None)
         day["legs_hit"] = sum(1 for h in hits if h == 1)
-    hist = [x for x in hist if x.get("made", "9999") >= str(today - timedelta(days=KEEP_DAYS))]
+    hist = [x for x in hist if str(x.get("made") or "") >= str(today - timedelta(days=KEEP_DAYS))]
     json.dump(hist, open(hp, "w"), ensure_ascii=False, indent=1)
 
     summary = summarise(P, today)

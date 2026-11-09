@@ -30,6 +30,44 @@ HERE = Path(__file__).resolve().parent
 LINE_NOROUND = re.compile(r"^\s*(\d{1,2})/(\d{1,2})\s*[; ]\s*([0-9]{1,2}:[0-9]{2})?\s*;(.+?);(.+?);\s*(\d{1,2})?\s*-?\s*(\d{1,2})?\s*$")
 LINE = re.compile(r"^\s*(?:speeldag\s*)?(\d+)\s*;\s*(\d{1,2})/(\d{1,2})\s*;\s*([0-9]{1,2}:[0-9]{2})?\s*;(.+?);(.+?);\s*(\d{1,2})?\s*-?\s*(\d{1,2})?\s*$")
 FIXTURE_DAYS = 9
+INTL_SLUG = {"UNL": "uefa.nations", "INTF": "fifa.friendly"}  # international matches in betjes: results from ESPN's scoreboard
+INTL_RE = re.compile(r"^\s*\d{4}-\d{2}-\d{2}T?[0-9:]*Z?\s*;(.+?);(.+?);(.*?);\s*(\d{1,2})\s*-\s*(\d{1,2})\s*$")
+
+
+def intl_files(state, today):
+    """ESPN scoreboard pages to fetch for the open legs of international matches in the betjes (played 1 to 8 days ago):
+    [(file name, slug, YYYYMMDD)]."""
+    p = state / "betje.json"
+    try:
+        B = json.load(open(p)) if p.exists() else []
+    except Exception:  # noqa: BLE001
+        return []
+    want = set()
+    for b in B:
+        for c in b.get("intl") or []:
+            for l in c.get("legs", []):
+                if l.get("hit") is None and l.get("div") in INTL_SLUG:
+                    d = l.get("edate") or l["when"][:10]
+                    if str(today - timedelta(days=8)) <= d < str(today):
+                        want.add((l.get("espn") or INTL_SLUG[l["div"]], d.replace("-", "")))
+    return [(f"INTL_{slug}_{d}.txt", slug, d) for slug, d in sorted(want)]
+
+
+def parse_intl(root, state, today):
+    """Final scores of international matches from fetched/INTL_<slug>_<YYYYMMDD>.txt (lines date;home;away;status;score)."""
+    rows = []
+    div_of = {v: k for k, v in INTL_SLUG.items()}
+    for f, slug, d in intl_files(state, today):
+        fp = root / "fetched" / f
+        if not fp.exists():
+            continue
+        for line in open(fp, encoding="utf-8", errors="replace"):
+            m = INTL_RE.match(line.strip())
+            if not m or re.search(r"sched|progress|half|postp|cancel|delay|susp", m.group(3), re.I):
+                continue
+            rows.append({"div": div_of.get(slug, "UNL"), "date": f"{d[:4]}-{d[4:6]}-{d[6:]}", "home": m.group(1).strip(),
+                         "away": m.group(2).strip(), "fh": int(m.group(4)), "fa": int(m.group(5))})
+    return rows
 ODDS_EVERY_DAYS = 2  # The Odds API: refresh a competition at most every other day
 INVISIBLE = dict.fromkeys(map(ord, "\u00ad\u200b\u200c\u200d\u2060\ufeff"), None)
 
@@ -249,7 +287,8 @@ def bets_report(state, out, today, report):
         if pl:
             report["betje"]["previous_leagues"] = dict(_lg(pl[-1]), day=pl[-1]["day"])
         # European nights of the next days that were already chosen in advance
-        ahead = [b for b in B if b.get("day", "") > str(today) and any(b.get(k) for k in weekly.EU_KEYS)]
+        last_ahead = str(today + timedelta(days=2))  # betjes are made further ahead too: only the next two days here
+        ahead = [b for b in B if str(today) < b.get("day", "") <= last_ahead and any(b.get(k) for k in weekly.EU_KEYS)]
         if ahead:
             report["betje"]["ahead"] = [dict({"day": b["day"]}, **{k: [_bet_txt(c) for c in b[k]] for k in weekly.EU_KEYS if b.get(k)})
                                         for b in ahead]
@@ -285,11 +324,11 @@ def bets_report(state, out, today, report):
         report["deep_dive"] = {"error": f"{type(e).__name__}: {e}"}
 
 
-def history_report(state, out, report):
+def history_report(state, out, report, today=None):
     """Profit or loss of all betjes and the analysis of the lost ones (history.py): on the page and in report.json."""
     try:
         import history
-        report["history"] = history.apply(state, out)
+        report["history"] = history.apply(state, out, today)
     except Exception as e:  # noqa: BLE001
         report["history"] = {"error": f"{type(e).__name__}: {e}"}
 
@@ -312,7 +351,7 @@ def finalize(root, today, now_s):
             report.setdefault("deep_dive", {})["analysis"] = len(ch["analysis"])
     except Exception as e:  # noqa: BLE001
         report.setdefault("deep_dive", {})["analysis_error"] = f"{type(e).__name__}: {e}"
-    history_report(state, out, report)
+    history_report(state, out, report, today)
     subprocess.run([sys.executable, "-I", str(HERE / "build.py"), str(out), str(root / "dist" / "streakscout.html")], check=True)
     json.dump(report, open(state / "report.json", "w"), ensure_ascii=False, indent=1, default=str)
     print(json.dumps({k: report.get(k) for k in ("betje", "superbet", "deep_dive", "history")}, ensure_ascii=False, indent=1, default=str))
@@ -356,7 +395,8 @@ def main():
     lrounds = league_rounds_to_fetch(leagues, learned, today)
     if args.plan:
         files = [f"{dv}.txt" for dv, m in leagues.items() if "url" in m] + \
-                [f"{c}_r{n}.txt" for c, n in lrounds] + [f"{c}_r{n}.txt" for c, n in rounds] + ["PLAYERS_B1.txt", "PLAYERS_CL.txt", "PLAYERS_EL.txt"]
+                [f"{c}_r{n}.txt" for c, n in lrounds] + [f"{c}_r{n}.txt" for c, n in rounds] + ["PLAYERS_B1.txt", "PLAYERS_CL.txt", "PLAYERS_EL.txt"] + \
+                [f for f, _, _ in intl_files(state, today)]
         print(json.dumps({"fetch": files}))
         return
 
@@ -594,6 +634,9 @@ def main():
             st["fixtures"] = len(keep)
             st["status"] = "niets op te halen" if not [r for r in rounds if r[0] == code] else "niet opgehaald"
 
+    intl = parse_intl(root, state, today)  # international matches of the betjes (Nations League, friendlies)
+    cup_played += intl
+    report["intl_results"] = len(intl)
     crp = state / "cup_results.csv"
     cup_res = pd.read_csv(crp) if crp.exists() else pd.DataFrame(columns=["div", "date", "home", "away", "fh", "fa"])
     if cup_played:
@@ -787,7 +830,7 @@ def main():
         report["track"] = {k: tr.get(k) for k in ("settled", "open", "all", "superbet_week", "betje", "players")}
     except Exception as e:  # noqa: BLE001
         report["track"] = {"error": str(e)}
-    history_report(state, out, report)
+    history_report(state, out, report, today)
     run(sys.executable, "-I", str(HERE / "build.py"), str(out), str(root / "dist" / "streakscout.html"))
     report["recent_rows"] = int(len(rec))
     report["fixtures_total"] = len(fixtures)

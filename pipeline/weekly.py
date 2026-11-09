@@ -18,7 +18,8 @@ from pathlib import Path
 
 import track
 
-EU_KEYS = ("cl", "el", "ecl", "eusafe")  # European nights stored per day in betje.json
+EU_KEYS = ("cl", "el", "ecl", "eusafe", "intl")  # European nights (and international matches) stored per day in betje.json
+INTL_DIVS = {"UNL", "INTF"}  # international matches (Nations League, friendlies): results come from ESPN, which can be late
 
 
 def week_of(d):
@@ -67,7 +68,7 @@ def settle_bet(bet, idx, today, sidx=None):
                 l["hit"] = h
             elif (today - d).days > STATS_WAIT:
                 l["hit"], l["void_checked"] = "void", True
-        elif not res and (today - d).days > 3:
+        elif not res and (today - d).days > (10 if l.get("div") in INTL_DIVS else 3):
             l["hit"] = "void"
         elif res:
             l["hit"] = "void"  # a market the score does not settle and that has no statistics rule

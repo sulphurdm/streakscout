@@ -157,6 +157,7 @@
         // so it is allowed at any signal level, with the same minimum chance as every other leg
         const lvlOk = b.rel.lvl >= (o.minLvl ?? 2) || b.id === "btts" || b.id === "bttsno";
         if ((o.ids && !o.ids.has(b.id)) || b.p < ((o.minPBy && o.minPBy[b.id]) || minP) || !lvlOk) continue;
+        if (o.keep && !o.keep(b)) continue; // optional extra filter (e.g. no leg where the bookmakers see much less chance)
         if (NEEDS_STATS(b) && !fresh(f.div)) continue; // stale statistics: skip
         const odd = legOdd(b);
         if (odd < minOdd) continue;

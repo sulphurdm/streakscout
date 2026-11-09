@@ -169,10 +169,15 @@ button, input, select { font: inherit; color: inherit }
 .leg-st.ko { background: var(--bad); color: var(--surface) }
 .leg-st.vd { background: var(--sunk); color: var(--muted) }
 .leg-st.op { box-shadow: inset 0 0 0 1.5px var(--line) }
+.daybar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px }
+.daybar label { font-weight: 600; font-size: 14px }
+.daybar select { flex: 1 1 240px; min-width: 0; max-width: 100% }
+.daynav { display: inline-flex; gap: 6px }
+.daynav .chip { font: inherit; font-size: 14px; color: var(--ink); background: var(--sunk); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; min-height: 34px; min-width: 40px }
 .lg-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; font-size: 12px; color: var(--muted) }
 .lg-chips .chip { font: inherit; font-size: 12px; color: var(--ink); background: var(--sunk); border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; cursor: pointer; min-height: 32px }
 .lg-chips .chip b { font-weight: 600; font-family: var(--f-mono) }
-.combo-head h3 .ahead { font: 600 11px/1 var(--f-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--surface); background: var(--ink); border-radius: 999px; padding: 4px 8px; vertical-align: middle; margin-left: 6px }
+.combo-head h3 .ahead { display: inline-block; font: 600 11px/1 var(--f-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--surface); background: var(--ink); border-radius: 999px; padding: 4px 8px; vertical-align: middle; margin: 2px 0 2px 6px }
 .leg-st.live { box-shadow: inset 0 0 0 2px var(--warn); animation: lvPulse 1.6s ease-in-out infinite }
 .leg-st.live.up { box-shadow: inset 0 0 0 2px var(--hit) }
 .lv { font: 600 11px/1 var(--f-mono); color: var(--muted); margin-left: 6px; white-space: nowrap }
@@ -1226,7 +1231,7 @@ const HIST = /*__HISTORY__*/null;
   function whyHTML(b, title, open = true) {
     const nm = (t) => DISPLAY[t] || t, L = (b.legs || []).filter((l) => l.why || l.reason || (DATA.research || {})[rkey(l)]);
     if (!L.length && !b.reason) return "";
-    const head = b.reason ? `<p class="note"><b>${b.chosen_by === "claude" ? "Keuze van Claude na de deep dive" : "Waarom deze combi"}:</b> ${esc(b.reason)}</p>` : "";
+    const head = b.reason ? `<p class="note"><b>${b.ahead ? (b.chosen_by === "claude" ? "Vooraf gekozen door Claude" : "Vooraf gemaakt") : b.chosen_by === "claude" ? "Keuze van Claude na de deep dive" : "Waarom deze combi"}:</b> ${esc(b.reason)}</p>` : "";
     return `<details class="why"${open ? " open" : ""}><summary>${esc(title || "Waarom deze bets?")}</summary>${head}<ul>${L.map((l) =>
       `<li><b>${esc(nm(l.h))} – ${esc(nm(l.a))} · ${esc(l.label)}</b>${l.reason ? `<br><span class="pick">${esc(l.reason)}</span>` : ""}${l.why ? `<br>${esc(l.why)}` : ""}${researchHTML(l)}</li>`).join("")}</ul>
       ${L.length < (b.legs || []).length ? `<p class="note">Bets zonder uitleg waren al begonnen toen de uitleg werd toegevoegd.</p>` : ""}</details>`;
@@ -1234,7 +1239,8 @@ const HIST = /*__HISTORY__*/null;
   // ---------- live scores: the viewer's browser asks ESPN's public scoreboard every minute while a match of a bet is on ----------
   // Only for display: a leg gets a provisional ✓/✗ as soon as the live score decides it (official settlement stays in the morning update).
   const ESPN = { E0: "eng.1", E1: "eng.2", SP1: "esp.1", D1: "ger.1", I1: "ita.1", F1: "fra.1", N1: "ned.1", P1: "por.1", SC0: "sco.1",
-    T1: "tur.1", G1: "gre.1", B1: "bel.1", USA: "usa.1", CL: "uefa.champions", EL: "uefa.europa", ECL: "uefa.europa.conf" };
+    T1: "tur.1", G1: "gre.1", B1: "bel.1", USA: "usa.1", CL: "uefa.champions", EL: "uefa.europa", ECL: "uefa.europa.conf",
+    UNL: "uefa.nations", INTF: "fifa.friendly" };
   const TEAM_ALIAS = { "Man United": "manchester united", "Man City": "manchester city", "Nott'm Forest": "nottingham forest",
     "M'gladbach": "monchengladbach", "Ein Frankfurt": "eintracht frankfurt", "Sp Lisbon": "sporting", "Ath Madrid": "atletico madrid",
     "Ath Bilbao": "athletic", "Sociedad": "real sociedad", "Paris SG": "paris saint germain", "Buyuksehyr": "basaksehir",
@@ -1334,6 +1340,12 @@ const HIST = /*__HISTORY__*/null;
     add(BJ.today); for (const g of EU_GROUPS) for (const c of (BJ.today && BJ.today[g.key]) || []) add(c); add(W.main); add(W.second);
     for (const cs of Object.values((BJ.today && BJ.today.leagues) || {})) for (const c of cs) add(c);
     for (const cs of Object.values(BJ.leagueOpen || {})) for (const c of cs) add(c);
+    for (const c of (BJ.today && BJ.today.intl) || []) add(c);
+    // the day menu: bets of yesterday and today from the other days' lists (a match that ends after midnight)
+    for (const x of BJ.days || []) if (x.day >= new Date(Date.now() - 864e5).toISOString().slice(0, 10) && x.day <= nowLocal().slice(0, 10)) {
+      add(x); for (const g of EU_GROUPS) for (const c of x[g.key] || []) add(c); for (const c of x.intl || []) add(c);
+      for (const cs of Object.values(x.leagues || {})) for (const c of cs) add(c);
+    }
     const now = nowLocal(), since = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
     return out.filter((l) => l.hit == null && ESPN[l.div] && l.when && l.when.slice(0, 10) >= since
       && l.when <= new Date(Date.parse(now.replace(" ", "T") + ":00Z") + 20 * 6e4).toISOString().slice(0, 16).replace("T", " "));
@@ -1345,7 +1357,7 @@ const HIST = /*__HISTORY__*/null;
     if (!legs.length) { liveTimer = setTimeout(pollLive, 10 * 6e4); return; }
     const want = new Map();
     for (const l of legs) {
-      const d = l.when.slice(0, 10);
+      const d = l.edate || l.when.slice(0, 10); // edate: the day ESPN files an international match under
       const days = l.div === "USA" ? [d, new Date(Date.parse(d + "T12:00:00Z") - 864e5).toISOString().slice(0, 10)] : [d];
       for (const x of days) want.set(`${ESPN[l.div]}|${x}`, { slug: ESPN[l.div], day: x });
     }
@@ -1390,8 +1402,27 @@ const HIST = /*__HISTORY__*/null;
   // a day relative to today: "vandaag", "morgen", "overmorgen" or the weekday
   const dayWord = (d) => {
     const n = Math.round((Date.parse(d + "T12:00:00Z") - Date.parse(nowLocal().slice(0, 10) + "T12:00:00Z")) / 864e5);
-    return n === 0 ? "vandaag" : n === 1 ? "morgen" : n === 2 ? "overmorgen" : ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"][new Date(d + "T12:00:00Z").getUTCDay()];
+    const wd = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"][new Date(d + "T12:00:00Z").getUTCDay()];
+    return n === 0 ? "vandaag" : n === 1 ? "morgen" : n === 2 ? "overmorgen" : n === -1 ? "gisteren"
+      : Math.abs(n) <= 6 ? wd : `${wd} ${+d.slice(8, 10)}/${+d.slice(5, 7)}`;
   };
+  const cap = (x) => (x ? x[0].toUpperCase() + x.slice(1) : x);
+  const dayOf = (t) => (t && t.day ? dayWord(t.day) : "vandaag");
+  // national teams (international matches in the betjes): Dutch names on the page, ESPN's English names in the data
+  const NAT = { Belgium: "België", "Türkiye": "Turkije", England: "Engeland", Croatia: "Kroatië", Czechia: "Tsjechië", Spain: "Spanje",
+    Italy: "Italië", France: "Frankrijk", Albania: "Albanië", Finland: "Finland", Montenegro: "Montenegro", Latvia: "Letland",
+    "San Marino": "San Marino", Belarus: "Wit-Rusland", Armenia: "Armenië", Cyprus: "Cyprus", Netherlands: "Nederland", Greece: "Griekenland",
+    Serbia: "Servië", Germany: "Duitsland", Scotland: "Schotland", "North Macedonia": "Noord-Macedonië", Slovakia: "Slowakije",
+    "Faroe Islands": "Faeröer", Slovenia: "Slovenië", Switzerland: "Zwitserland", Argentina: "Argentinië", Uruguay: "Uruguay",
+    Colombia: "Colombia", Chile: "Chili", Norway: "Noorwegen", Wales: "Wales", Portugal: "Portugal", Denmark: "Denemarken",
+    Austria: "Oostenrijk", "Republic of Ireland": "Ierland", Sweden: "Zweden", "Bosnia-Herzegovina": "Bosnië-Herzegovina",
+    Romania: "Roemenië", Poland: "Polen", Japan: "Japan", Brazil: "Brazilië", Iceland: "IJsland", Luxembourg: "Luxemburg",
+    Kazakhstan: "Kazachstan", Lithuania: "Litouwen", Liechtenstein: "Liechtenstein", Israel: "Israël", Hungary: "Hongarije",
+    "Northern Ireland": "Noord-Ierland", Ukraine: "Oekraïne", Georgia: "Georgië", Kosovo: "Kosovo", "Costa Rica": "Costa Rica",
+    Singapore: "Singapore", Ecuador: "Ecuador", Bolivia: "Bolivia", Paraguay: "Paraguay", Peru: "Peru", Estonia: "Estland",
+    Bulgaria: "Bulgarije", Moldova: "Moldavië", Andorra: "Andorra", Gibraltar: "Gibraltar", Malta: "Malta", Azerbaijan: "Azerbeidzjan",
+    "South Korea": "Zuid-Korea", Qatar: "Qatar", Australia: "Australië" };
+  for (const [k, v] of Object.entries(NAT)) if (!DISPLAY[k]) DISPLAY[k] = v;
   // up: a European night of a next day that was chosen in advance (DATA.betje.upcoming[ui])
   function euCardHTML(BJ, g, up, ui) {
     const t = up || BJ.today, key = g.key, dw = up ? dayWord(t.day) : "vandaag", Dw = dw[0].toUpperCase() + dw.slice(1);
@@ -1404,7 +1435,7 @@ const HIST = /*__HISTORY__*/null;
     const head = `<div class="combo-head"><h3>${esc(g.name)}${up ? ` <span class="ahead">${esc(Dw)}</span>` : ""}</h3><span class="pl-meta">${esc(fmtISO(t.day))} · ${list.length} combi${list.length === 1 ? "" : "'s"} · ${meta}</span></div>`;
     if (!list.length) return `<div class="combo super">${head}<p class="note">${up ? `${esc(Dw)} 's avonds` : "Vanavond"} geen ${g.safe ? "safe combi" : `${g.tag}-betje`}: ${esc(t[key + "_note"] || "")}${recTxt}</p></div>`;
     const blocks = list.map((b, i) => {
-      const legs = b.legs.map((l) => `<li>${legIcon(l)}<span>${g.safe ? `<span class="lg">${esc(lname(l.div))}</span>` : ""}${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""}${liveBadge(l)} · ${pct(l.pb ?? l.p)} · ±${l.odd.toFixed(2)}</small></span></li>`).join("");
+      const legs = b.legs.map((l) => `<li>${legIcon(l)}<span>${g.safe ? `<span class="lg">${esc(lname(l.div))}</span>` : ""}${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""}${liveBadge(l)} · ${pct(l.pb ?? l.p)} · ${l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}` : `±${l.odd.toFixed(2)}`}</small></span></li>`).join("");
       const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
       return `<div class="sub-combo"><h4>${esc(b.name)} · ${b.odds.toFixed(2)}x</h4><ol>${legs}</ol>
         <div class="combo-sum"><span>${betStatus(b)}</span><span>Kans <b>${(b.p * 100).toFixed(b.p < 0.1 ? 1 : 0)}%</b> (1 op ${Math.round(1 / b.p)})</span>${canAdd ? `<button class="go" data-sb="${up ? `u${ui}|` : ""}${key}.${i}">Zet in combi</button>` : ""}</div>
@@ -1414,8 +1445,10 @@ const HIST = /*__HISTORY__*/null;
     const rule = g.safe ? `Eén combi van ±2 à 3x uit de Europa League- en Conference League-matchen van ${dw} samen, met de bets die het zekerst lijken.`
       : `Enkel matchen uit de ${esc(g.name.replace("-avond", ""))} van ${dw}, elke combi minstens 5x; dezelfde bet (of een bet die op hetzelfde neerkomt) staat nooit in alle betjes tegelijk.`;
     const early = list.some((b) => b.early);
-    const note = `${early ? `Al vooraf gekozen door Claude (op ${esc(fmtISO((list[0].made || "").slice(0, 10)))}), na een deep dive op deze matchen, met de cijfers van het model als vertrekpunt; deze combi's blijven staan, ook na de update van die ochtend. Kijk vlak voor de aftrap nog even naar de opstellingen.`
-      : byClaude ? "Gekozen door Claude na een deep dive op de matchen van vanavond, met de cijfers van het model als vertrekpunt." : "Het voorstel van het model."} ${rule} Enkel markten die op de eindstand afgerekend worden. Voor de bekers hebben we geen bookmakerodds: de odds zijn geschat (eerlijke odd min 5% marge). Hou de inzet klein.`;
+    const ahead = list.some((b) => b.ahead);
+    const note = `${ahead ? `Al vooraf gekozen door Claude op ${esc(fmtISO((list[0].made || "").slice(0, 10)))}, op jouw vraag, uit de bookmakerodds van DraftKings (via ESPN, zonder marge) en de vorm van beide ploegen: de bets met de meeste kans. Voor goals- en scoren-bets is de kans afgeleid uit de 1X2-odds en de over/under-lijn; die odds zijn geschat (eerlijke odd min 5% marge). De update van die ochtend verandert deze combi's niet meer, maar onderzoekt de matchen wel en meldt nieuws dat een bet riskanter maakt. Kijk vlak voor de aftrap nog even naar de opstellingen.`
+      : early ? `Al vooraf gekozen door Claude (op ${esc(fmtISO((list[0].made || "").slice(0, 10)))}), na een deep dive op deze matchen, met de cijfers van het model als vertrekpunt; deze combi's blijven staan, ook na de update van die ochtend. Kijk vlak voor de aftrap nog even naar de opstellingen.`
+      : byClaude ? "Gekozen door Claude na een deep dive op de matchen van vanavond, met de cijfers van het model als vertrekpunt." : "Het voorstel van het model."} ${rule} Enkel markten die op de eindstand afgerekend worden. ${ahead ? "" : list.some((b) => b.legs.some((l) => l.bk)) ? "Waar een bookmaker bij de odd staat, komt die uit het onderzoek (het kan bij jouw bookmaker iets anders zijn); de andere odds zijn geschat (eerlijke odd min 5% marge)." : "Voor de bekers hebben we geen bookmakerodds: de odds zijn geschat (eerlijke odd min 5% marge)."} Hou de inzet klein.`;
     return `<div class="combo super cl">${head}${t[key + "_note"] ? `<p class="note"><b>Keuze van Claude:</b> ${esc(t[key + "_note"])}</p>` : ""}${blocks}<p class="note">${note}${recTxt}</p></div>`;
   }
   // Weekend (Friday to Sunday): one or two betjes per league from that league's matches of the day, for the league that is picked
@@ -1427,7 +1460,7 @@ const HIST = /*__HISTORY__*/null;
     const rec = BJ.leagueRecord || { n: 0 };
     const recTxt = rec.n ? ` Tot nu toe ${rec.won} van ${rec.n} competitie-betjes gewonnen, ${rec.profit >= 0 ? "+" : "−"}${Math.abs(rec.profit).toFixed(2).replace(".", ",")} eenheden bij een inzet van 1 per betje.` : "";
     const head = `<div class="combo-head"><h3>${list.length && list[0].single ? "Bet" : "Betje"} ${esc(name)}</h3><span class="pl-meta">${esc(fmtISO(t.day))} · ${list.length ? (list[0].single ? "1 bet · " : `${list.length} betje${list.length === 1 ? "" : "s"} · `) : ""}enkel ${esc(name)}-matchen ${list.some((b) => b.span) ? `van ${esc(dayWord(t.day))} tot ${esc(dayWord(list.reduce((m, b) => (b.span && b.span > m ? b.span : m), t.day)))}` : `van ${esc(dayWord(t.day))}`}</span></div>`;
-    if (!list.length) return `<div class="combo super lg">${head}<p class="note">Vandaag geen betje voor de ${esc(name)}: er zijn vandaag te weinig matchen van deze competitie (of geen meer die nog moeten beginnen).${recTxt}</p>${chips}</div>`;
+    if (!list.length) return `<div class="combo super lg">${head}<p class="note">${esc(cap(dayOf(t)))} geen betje voor de ${esc(name)}: te weinig matchen van deze competitie die dag (of geen sterke bets meer)${BJ.view ? "; een betje van een eerdere weekenddag kan deze matchen al bevatten" : ""}.${recTxt}</p>${chips}</div>`;
     const blocks = list.map((b, i) => {
       const legs = b.legs.map((l) => `<li>${legIcon(l)}<span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""}${liveBadge(l)} · ${pct(l.pb ?? l.p)} · ${l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}` : `±${l.odd.toFixed(2)} geschat`}</small></span></li>`).join("");
       const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
@@ -1439,6 +1472,23 @@ const HIST = /*__HISTORY__*/null;
     return `<div class="combo super lg">${head}${note ? `<p class="note"><b>Keuze van Claude:</b> ${esc(note)}</p>` : ""}${blocks}
       <p class="note">${list.some((b) => b.early) ? `Al vooraf gemaakt op ${esc(fmtISO((list[0].made || "").slice(0, 10)))}, op jouw vraag: de update van die ochtend verandert dit niet meer. ` : ""}${list[0].single ? "Vandaag maar één match van deze competitie: één bet in plaats van een combi. " : ""}${byClaude ? "Gekozen door Claude, met de cijfers van het model als vertrekpunt." : `Het voorstel van het model: een combi van ±4 à 5x met de zekerste bets uit de matchen van deze competitie${list.some((b) => b.span) ? "; er waren te weinig matchen op één dag, dus ook met matchen van de rest van het weekend" : " van vandaag"}. Geen gelijkspel-, under- of nul-bets: die komen in het trackrecord minder vaak uit dan voorspeld.`}${list.length > 1 ? " De twee betjes hebben geen match gemeen." : ""} Enkel markten die op de eindstand afgerekend worden; waar geen bookmakerodd bekend is, is de odd geschat. Kies bovenaan een andere competitie om haar betje te zien. Hou de inzet klein.${recTxt}</p>${chips}</div>`;
   }
+  // International matches (Nations League, friendlies): combis Claude made from research, the model knows no national teams
+  function intlCardHTML(BJ, t) {
+    const list = (t && t.intl) || [];
+    if (!list.length) return "";
+    const nm = (x) => DISPLAY[x] || x, comp = (d) => (d === "UNL" ? "Nations League" : "vriendschappelijk");
+    const rec = (BJ.euRecord && BJ.euRecord.intl) || { n: 0 };
+    const recTxt = rec.n ? ` Tot nu toe ${rec.won} van ${rec.n} interland-betjes gewonnen, ${rec.profit >= 0 ? "+" : "−"}${Math.abs(rec.profit).toFixed(2).replace(".", ",")} eenheden bij een inzet van 1 per combi.` : "";
+    const head = `<div class="combo-head"><h3>Interlands${t.day !== nowLocal().slice(0, 10) ? ` <span class="ahead">${esc(cap(dayWord(t.day)))}</span>` : ""}</h3><span class="pl-meta">${esc(fmtISO(t.day))} · ${list.length} combi${list.length === 1 ? "" : "'s"} · landenploegen</span></div>`;
+    const blocks = list.map((b, i) => {
+      const legs = b.legs.map((l) => `<li>${legIcon(l)}<span><span class="lg">${esc(comp(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""}${liveBadge(l)} · ${pct(l.p)} · ${l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}` : `±${l.odd.toFixed(2)} geschat`}</small></span></li>`).join("");
+      return `<div class="sub-combo"><h4>${esc(b.name)} · ${b.odds.toFixed(2)}x</h4><ol>${legs}</ol>
+        <div class="combo-sum"><span>${betStatus(b)}</span><span>Kans <b>${(b.p * 100).toFixed(b.p < 0.1 ? 1 : 0)}%</b> (1 op ${Math.round(1 / b.p)})</span></div>
+        ${whyHTML(b, "Waarom deze bets?", i === 0)}</div>`;
+    }).join("");
+    return `<div class="combo super cl">${head}${t.intl_note ? `<p class="note"><b>Keuze van Claude:</b> ${esc(t.intl_note)}</p>` : ""}${blocks}
+      <p class="note">Gemaakt door Claude op ${esc(fmtISO((list[0].made || "").slice(0, 10)))}, op jouw vraag. Het model van StreakScout kent geen landenploegen: de kansen komen uit de bookmakerodds van DraftKings (via ESPN, zonder marge) en de vorm; voor matchen waar nog geen odds waren (de laatste groepsmatchen) zijn ze geschat uit de sterkte van beide landen, bijgesteld met de odds van hun vorige match, en dan enkel voor uitslag-bets. Afwezigen en wat er op het spel staat zijn niet apart nagekeken: kijk zelf even naar de opstellingen. Interlands zijn grillig (wissels, weinig op het spel): hou de inzet klein.${recTxt}</p></div>`;
+  }
   // Betje van de dag: 5 to 10x from today's matches over all competitions
   function betjeCardHTML(BJ) {
     const lname = (d) => (DATA.divNames[d] || (DATA.cups[d] && DATA.cups[d].name) || d), nm = (t) => DISPLAY[t] || t;
@@ -1449,34 +1499,68 @@ const HIST = /*__HISTORY__*/null;
     const b = BJ.today;
     if (!b || b.none) {
       return `<div class="combo super"><div class="combo-head"><h3>Betje van de dag</h3><span class="pl-meta">${b ? esc(fmtISO(b.day)) : ""}</span></div>
-        <p class="note">${b && b.chosen_by === "claude" ? `Vandaag geen betje: na de deep dive vond Claude geen bets die goed genoeg zijn. ${esc(b.note || "")}` : `Vandaag geen betje${b && b.note ? `: ${esc(b.note)}` : ""}. Er komt er alleen een als er goede bets zijn met een mooie odd.`}</p>${recTxt ? `<p class="note">${recTxt}</p>` : ""}${hist}</div>`;
+        <p class="note">${b && b.chosen_by === "claude" ? `${esc(cap(dayOf(b)))} geen betje: na de deep dive vond Claude geen bets die goed genoeg zijn. ${esc(b.note || "")}` : `${esc(cap(dayOf(b)))} geen betje${b && b.note ? `: ${esc(b.note)}` : ""}.${b && b.day > nowLocal().slice(0, 10) ? " De update van die ochtend probeert het opnieuw, met de odds en het nieuws van dat moment." : " Er komt er alleen een als er goede bets zijn met een mooie odd."}`}</p>${recTxt ? `<p class="note">${recTxt}</p>` : ""}${hist}</div>`;
     }
     const legs = b.legs.map((l) => `<li>${legIcon(l)}<span><span class="lg">${esc(lname(l.div))}</span>${esc(l.label)} <small>· ${esc(whenTxt(l.when))} ${esc(nm(l.h))} – ${esc(nm(l.a))}${l.score ? ` <span class="score">${esc(l.score)}</span>` : ""}${liveBadge(l)} · ${pct(l.pb ?? l.p)} · ${l.bk ? `${esc(l.bk)} ${l.odd.toFixed(2)}${l.derived ? " (afgeleid)" : ""}` : `±${l.odd.toFixed(2)} geschat`}</small></span></li>`).join("");
     const n = b.legs.length;
     const st = betStatus(b);
     const ev = Math.round((b.p * b.odds - 1) * 100);
     const canAdd = b.status === "bezig" && b.legs.every((l) => l.hit == null && l.when > nowLocal());
-    const sum = `<span>${st}</span><span>Combi-odd <b>${b.odds.toFixed(2)}</b></span><span>Kans <b>${(b.p * 100).toFixed(0)}%</b> (1 op ${Math.round(1 / b.p)})</span><span>Verwachte opbrengst <b>${ev >= 0 ? "+" : "−"}${Math.abs(ev)}%</b></span>${canAdd ? `<button class="go" data-sb="betje">Zet in combi</button>` : ""}`;
+    const sum = `<span>${st}</span><span>Combi-odd <b>${b.odds.toFixed(2)}</b></span><span>Kans <b>${(b.p * 100).toFixed(0)}%</b> (1 op ${Math.round(1 / b.p)})</span>${b.estimated || b.legs.some((l) => !l.bk) ? "" : `<span>Verwachte opbrengst <b>${ev >= 0 ? "+" : "−"}${Math.abs(ev)}%</b></span>`}${canAdd ? `<button class="go" data-sb="betje">Zet in combi</button>` : ""}`;
     const cls = b.status === "gewonnen" ? " won" : b.status === "verloren" ? " lost" : "";
     const early = b.early ? `Al vooraf gemaakt op ${esc(fmtISO((b.made || "").slice(0, 10)))}, op jouw vraag: de update en de deep dive van die ochtend veranderen dit betje niet meer. ` : "";
-    const note = early + (b.chosen_by !== "claude" && b.estimated ? `Het voorstel van het model: vandaag waren er geen bookmakerodds, dus het model nam de zekerste bets van vandaag tot ±6x, enkel markten die op de eindstand afgerekend worden. De odds zijn geschat (eerlijke odd min 5% marge): vergelijk bij je bookmaker en hou de inzet klein.`
+    const note = b.ahead ? `Al vooraf gemaakt op ${esc(fmtISO((b.made || "").slice(0, 10)))}, op jouw vraag, met het model en de bookmakerodds van dat moment (Bet365 en DraftKings via ESPN): ${b.value ? "bets met een echte odd waar het model meer kans ziet dan de bookmaker" : "de zekerste bets van die dag tot ±6,5x, zonder gelijkspel-, under- en nul-bets, en geen bet waar de bookmakers duidelijk minder kans zien dan het model"}; enkel markten die op de eindstand afgerekend worden. De kans is het gemiddelde van het model en de bookmaker (zonder marge); ${b.legs.every((l) => l.bk) ? "de odds kunnen tegen de speeldag nog wat bewegen" : "waar geen bookmaker bij de odd staat, is die geschat (eerlijke odd min 5% marge)"}. De update van die ochtend verandert dit betje niet meer, maar onderzoekt de matchen wel en meldt nieuws (blessures, schorsingen) dat een bet riskanter maakt. Kijk vlak voor de aftrap nog even naar de opstellingen.` : early + (b.chosen_by !== "claude" && b.estimated ? `Het voorstel van het model: vandaag waren er geen bookmakerodds, dus het model nam de zekerste bets van vandaag tot ±6x, enkel markten die op de eindstand afgerekend worden. De odds zijn geschat (eerlijke odd min 5% marge): vergelijk bij je bookmaker en hou de inzet klein.`
       : b.chosen_by === "claude" ? `Gekozen door Claude na een deep dive op elke match (vorm in alle competities, onderlinge duels, blessures en schorsingen, scheidsrechter, context) uit alle markten van vandaag, met de cijfers van het model als vertrekpunt: 2 tot 5 bets, samen 5 tot 10x. Waar geen bookmakerodd bekend is, is de odd geschat. Ook na onderzoek blijft het een gok: hou de inzet klein.` : `Elke dag één keer gemaakt uit de matches van die dag met een echte bookmakerodd (1X2 en over/under 2.5), van 2 tot 5 bets en 5 tot 10x. Er gaan enkel bets in met een odd van minstens 1,60 waar het model meer kans ziet dan de bookmaker. De kans hierboven is het gemiddelde van het model en de bookmaker (zonder marge): waar ze sterk verschillen, heeft de markt meestal gelijk. Ook met waarde blijft het een gok: hou de inzet klein.`);
     return `<div class="combo super${cls}"><div class="combo-head"><h3>Betje van de dag</h3>
       <span class="pl-meta">${esc(fmtISO(b.day))} · ${n} bets · ±${b.target}x</span></div>
       <ol>${legs}</ol><div class="combo-sum">${sum}</div><p class="note">${note}${recTxt ? ` ${recTxt}` : ""}</p>${hist}${whyHTML(b)}</div>`;
   }
+  // the day menu: every day of the last and the next weeks with its betjes (DATA.betje.days)
+  const today0 = () => nowLocal().slice(0, 10);
+  function dayMenuHTML(days, sel) {
+    const ST = { gewonnen: "✓", verloren: "✗", vervallen: "–" };
+    const opt = (x) => {
+      const all = [x.none ? null : x, ...EU_GROUPS.flatMap((g) => x[g.key] || []), ...(x.intl || []), ...Object.values(x.leagues || {}).flat()].filter((b) => b && b.legs);
+      const won = all.filter((b) => b.status === "gewonnen").length, done = all.filter((b) => b.status === "gewonnen" || b.status === "verloren").length;
+      const what = [x.none ? "" : "betje", EU_GROUPS.some((g) => (x[g.key] || []).length) ? "Europees" : "", (x.intl || []).length ? "interlands" : "",
+        Object.keys(x.leagues || {}).length ? `${Object.keys(x.leagues).length} competities` : ""].filter(Boolean).join(" · ");
+      return `<option value="${esc(x.day)}"${x.day === sel ? " selected" : ""}>${esc(whenTxt(x.day))}${x.day === today0() ? " (vandaag)" : ""} — ${esc(what || "geen betjes")}${done ? ` · ${won}/${done} ${ST.gewonnen}` : ""}</option>`;
+    };
+    return `<div class="daybar"><label for="bjDay">Betjes van</label><select class="select" id="bjDay">${days.map(opt).join("")}</select>
+      <span class="daynav"><button class="chip" data-dd="-1" aria-label="Vorige dag">‹</button><button class="chip" data-dd="1" aria-label="Volgende dag">›</button>${sel !== today0() ? `<button class="chip" data-dd="0">Vandaag</button>` : ""}</span></div>`;
+  }
   function renderSuper() {
-    const W = DATA.superbetWeek, wrap = $("superWrap"), BJ = DATA.betje;
+    const W = DATA.superbetWeek, wrap = $("superWrap"), B0 = DATA.betje;
     const cards = [];
-    if (BJ) {
+    const days = ((B0 && B0.days) || []).filter((x) => x && x.day).sort((x, y) => (x.day < y.day ? -1 : 1));
+    if (days.length && !days.some((x) => x.day === today0())) { days.push({ day: today0(), none: true }); days.sort((x, y) => (x.day < y.day ? -1 : 1)); }
+    if (!state.bjDay || !days.some((x) => x.day === state.bjDay)) state.bjDay = today0();
+    const view = B0 && state.bjDay !== today0() ? days.find((x) => x.day === state.bjDay) : null;
+    let BJ = B0;
+    if (view) {
+      // another day: its own betjes, and league betjes of the two days before that still had matches on this day
+      const open = {};
+      for (const y of days.filter((y) => y.day < view.day && y.day >= new Date(Date.parse(view.day + "T12:00:00Z") - 2 * 864e5).toISOString().slice(0, 10)))
+        for (const [dv, cs] of Object.entries(y.leagues || {})) for (const c of cs) if (c.legs.some((l) => l.when.slice(0, 10) >= view.day)) (open[dv] = open[dv] || []).push(Object.assign({ day: y.day }, c));
+      BJ = Object.assign({}, B0, { today: view, upcoming: [view], leagueOpen: open, weekend: [5, 6, 0].includes(new Date(view.day + "T12:00:00Z").getUTCDay()), view: true });
+    }
+    if (days.length) cards.push(dayMenuHTML(days, state.bjDay));
+    if (BJ && view) {
+      for (const g of EU_GROUPS) { const c = euCardHTML(BJ, g, view, 0); if (c) cards.push(c); }
+      const ic = intlCardHTML(BJ, view); if (ic) cards.push(ic);
+      if (!view.none || !(EU_GROUPS.some((g) => (view[g.key] || []).length) || (view.intl || []).length)) cards.push(betjeCardHTML(BJ));
+      if ((view.leagues || Object.keys(BJ.leagueOpen).length) && DATA.divNames[state.div]) cards.push(leagueCardHTML(BJ, state.div));
+      else if (view.leagues && Object.keys(view.leagues).length) cards.push(`<div class="combo super lg"><div class="lg-chips"><span>Betjes per competitie op deze dag:</span>${Object.keys(view.leagues).map((d) => `<button class="chip" data-lg="${esc(d)}">${esc(DATA.divNames[d] || d)}</button>`).join("")}</div></div>`);
+    } else if (BJ) {
       for (const g of EU_GROUPS) { const c = euCardHTML(BJ, g); if (c) cards.push(c); }
-      cards.push(betjeCardHTML(BJ));
+      const ic = intlCardHTML(BJ, BJ.today); if (ic) cards.push(ic);
+      if (!(BJ.today && BJ.today.none && ic)) cards.push(betjeCardHTML(BJ));
       // weekend: the betje(s) of the league that is picked
       if (BJ.today && (BJ.today.leagues || BJ.leagueOpen) && DATA.divNames[state.div] && (BJ.weekend || Object.keys(BJ.today.leagues || {}).length)) cards.push(leagueCardHTML(BJ, state.div));
       // European nights of the next days, already chosen in advance
       (BJ.upcoming || []).forEach((x, ui) => { for (const g of EU_GROUPS) { const c = euCardHTML(BJ, g, x, ui); if (c) cards.push(c); } });
     }
-    if (W && W.main && W.main.legs && W.main.legs.length >= 2) {
+    if (!view && W && W.main && W.main.legs && W.main.legs.length >= 2) {
       if (W.second) cards.push(superCardHTML(W.second, "second", W));
       cards.push(superCardHTML(W.main, "main", W));
       if (!W.second && W.main.status === "verloren" && W.secondNote) cards.push(`<p class="note">Geen second chance: ${esc(W.secondNote.replace(/^\S+: /, ""))}.</p>`);
@@ -1492,6 +1576,13 @@ const HIST = /*__HISTORY__*/null;
       store.set("slip", state.slip); renderSlip(); renderBest();
     }));
     wrap.querySelectorAll("button[data-lg]").forEach((btn) => btn.addEventListener("click", () => setLeague(btn.dataset.lg)));
+    const sel = $("bjDay");
+    if (sel) sel.addEventListener("change", () => { state.bjDay = sel.value; renderSuper(); });
+    wrap.querySelectorAll("button[data-dd]").forEach((btn) => btn.addEventListener("click", () => {
+      const k = +btn.dataset.dd, i = days.findIndex((x) => x.day === state.bjDay);
+      state.bjDay = k === 0 ? today0() : (days[Math.min(days.length - 1, Math.max(0, i + k))] || {}).day || state.bjDay;
+      renderSuper(); const s2 = $("bjDay"); if (s2) s2.focus();
+    }));
   }
   function renderBest() {
     renderSuper();

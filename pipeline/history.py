@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 GROUPS = [("betje", "Betje van de dag"), ("cl", "Champions League-avond"), ("el", "Europa League-avond"),
-          ("ecl", "Conference League-avond"), ("eusafe", "Europese safe combi"), ("league", "Betje per competitie"),
+          ("ecl", "Conference League-avond"), ("eusafe", "Europese safe combi"), ("intl", "Interlands"), ("league", "Betje per competitie"),
           ("week", "Superbet van de week"),
           ("second", "Second chance"), ("daily", "Superbet van de dag (oud)")]
 GNAME = dict(GROUPS)
@@ -182,9 +182,10 @@ def _eff(b):
     return o
 
 
-def collect(state):
+def collect(state, today=None):
     state = Path(state)
-    B = _load(state / "betje.json", [])
+    # betjes made in advance for days after today are not in the history yet (the page shows them in its day menu)
+    B = [d for d in _load(state / "betje.json", []) if not today or d.get("day", "") <= str(today)]
     out = []
 
     def add(group, bid, day, b):
@@ -196,7 +197,7 @@ def collect(state):
                                                              for l in b["legs"]], "raw": b})
     for d in B:
         add("betje", f"{d['day']}|betje", d["day"], d)
-        for g in ("cl", "el", "ecl", "eusafe"):
+        for g in ("cl", "el", "ecl", "eusafe", "intl"):
             for c in d.get(g) or []:
                 add(g, f"{d['day']}|{g}|{c.get('name')}", d["day"], c)
         for div, cs in (d.get("leagues") or {}).items():  # weekend: betjes per league
@@ -223,7 +224,7 @@ def collect(state):
     return res
 
 
-def build(state):
+def build(state, today=None):
     state = Path(state)
     research = _load(state / "research.json", {})
     notes = _load(state / "analysis.json", {})
@@ -235,7 +236,7 @@ def build(state):
         sidx = track.stats_index(pd.read_csv(p)) if p.exists() else None
     except Exception:  # noqa: BLE001
         sidx = None
-    bets = collect(state)
+    bets = collect(state, today)
     done = [b for b in bets if b["status"] in ("gewonnen", "verloren", "vervallen")]
     for b in bets:
         st = b["status"]
@@ -309,10 +310,10 @@ def report(h):
     return {"total": t, "verdict": h["verdict"], "by": h["by"], "to_analyse": todo}
 
 
-def apply(state, out):
+def apply(state, out, today=None):
     """Add the history to out/app_data.json (for the page); returns the report section."""
     out = Path(out)
-    h = build(state)
+    h = build(state, today)
     p = out / "app_data.json"
     data = json.load(open(p))
     data["betHistory"] = h
